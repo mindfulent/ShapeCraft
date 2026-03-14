@@ -380,6 +380,13 @@ Based on Claude Sonnet 4.6 pricing ($3/MTok input, $15/MTok output):
 | Trial cost per server (50 × $0.03) | $1.50 |
 | Breakeven: trials per paying server | 5.3 trials per conversion (well above 20% target) |
 
-## Open Questions
+## Texture Asset Policy
 
-1. **Vanilla texture licensing** — Vanilla textures are Mojang's assets. Do generated composites that modify them have redistribution implications for exported resource packs?
+ShapeCraft never redistributes unmodified vanilla Minecraft texture files. The approach:
+
+- **Model references only** — Generated model JSON references vanilla textures by path (e.g., `minecraft:block/oak_planks`). The game loads these natively. No Mojang assets are copied or bundled.
+- **Generated textures are new assets** — Tinted and composited textures are written as new PNGs in the `shapecraft:` namespace. They are derivative works created by the mod, not copies of originals.
+- **Export excludes vanilla files** — The `/shapecraft export` resource pack contains only ShapeCraft-generated assets: model JSONs, blockstate JSONs, and generated texture PNGs. Raw vanilla textures are never included.
+- **Disclaimer on export** — Exported packs include a note: "Generated textures may be derived from Minecraft's vanilla art style. ShapeCraft is not affiliated with Mojang or Microsoft."
+
+This matches established modding community practice. Resource pack creators routinely create derivative textures (tinted, composited, restyled variants). Mojang's enforcement targets wholesale redistribution of their assets and misrepresentation of affiliation — not derivative creative works in mods.

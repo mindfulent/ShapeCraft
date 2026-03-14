@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.3 — 2026-03-14
+
+- Added Texture Asset Policy section to PRD — clarifies that ShapeCraft never redistributes vanilla textures
+
 ## v0.1.2 — 2026-03-14
 
 - Fixed markdown rendering in design brief (`docs/BRIEF.md`) — removed backslash escapes and HTML entities
