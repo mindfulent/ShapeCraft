@@ -1,4 +1,4 @@
-# ShapeCraft v0.1.1
+# ShapeCraft v0.1.2
 
 Natural language block generation for Minecraft.
 

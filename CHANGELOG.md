@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.2 — 2026-03-14
+
+- Fixed markdown rendering in design brief (`docs/BRIEF.md`) — removed backslash escapes and HTML entities
+
 ## v0.1.1 — 2026-03-14
 
 - Added Product Requirements Document (`docs/PRD.md`)

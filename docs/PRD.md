@@ -34,8 +34,10 @@ Players describe a block in plain English and get a placeable, textured custom b
 | Block pool size | 64 (configurable) | Covers casual use. Server owners can increase via config if needed. |
 | Model complexity cap | 16 elements max | Vanilla models rarely exceed 6-8. Cap prevents rendering performance issues while leaving room for creative geometry. |
 | Directional placement | Yes (core feature) | Blocks rotate based on player facing direction, like vanilla. Fixed orientation breaks the builder experience for any asymmetric block. |
-| Pricing | Cost-plus, never lose money | Price low enough to be an easy yes for server owners; high enough to cover Claude API costs with margin. Exact tier TBD. |
-| Trial budget | Generous enough to hook | Enough generations that a server gets real value before hitting the wall. Exact count TBD. |
+| Pricing | $8/month, 250 generations/month | Cost ceiling per server: $7.50 (250 × $0.03). Never loses money. Low enough to be an easy yes; lower than SynthCraft ($10) since no GPU compute. |
+| Trial budget | 50 generations (one-time) | ~$1.50 API cost. Enough to generate 50 unique blocks — a genuinely useful set that hooks a server. Cannot be reset. |
+| Per-player daily cap | 10 generations/day | Prevents one player from burning the server's monthly budget in a single session. Configurable by server owner. |
+| Generation backend | Claude Sonnet 4.6 | ~$0.03/generation worst case ($3/$15 per MTok input/output). Prompt caching reduces steady-state cost to ~$0.02. |
 
 ---
 
@@ -207,9 +209,10 @@ ShapeCraft has per-generation infrastructure costs (Claude API calls). The licen
 **Acceptance Criteria:**
 
 - I install the mod JAR, start the server, and generation works immediately — no registration, no activation code, no payment info.
-- Trial provides a limited number of generations (invisible to players; only the server owner sees remaining count via `/shapecraft status`).
+- Trial provides 50 generations (invisible to players; only the server owner sees remaining count via `/shapecraft status`).
 - Server console shows only: "ShapeCraft ready" — no indication this is a trial.
 - The experience is identical to a paid license during the trial period.
+- The same 10 per-player daily cap applies during the trial.
 
 ### US-041: Trial Expiration
 
@@ -225,13 +228,14 @@ ShapeCraft has per-generation infrastructure costs (Claude API calls). The licen
 
 ### US-042: Subscription Activation
 
-> As a server owner, I want to activate ShapeCraft with a code from my Patreon subscription so I can unlock unlimited generation for my server.
+> As a server owner, I want to activate ShapeCraft with a code from my Patreon subscription so my server gets a monthly generation budget.
 
 **Acceptance Criteria:**
 
-- I subscribe on Patreon and receive an activation code (e.g., `SHAPE-XXXX-XXXX`).
+- I subscribe on Patreon ($8/month) and receive an activation code (e.g., `SHAPE-XXXX-XXXX`).
 - I run `/shapecraft activate SHAPE-XXXX-XXXX` on my server.
-- Server confirms activation immediately — generation is unlocked.
+- Server confirms activation immediately — generation is unlocked with 250 generations per month.
+- Monthly budget resets on the subscription renewal date.
 - One code activates one server. The code cannot be reused on a different server.
 
 ### US-043: Subscription Lapse Handling
@@ -257,7 +261,7 @@ Server owners need control over generation and visibility into usage.
 
 **Acceptance Criteria:**
 
-- Config file allows setting: max generations per player per day, block pool size, content filter toggle, and generation permissions (everyone, ops only, or allowlist).
+- Config file allows setting: max generations per player per day (default: 10), block pool size (default: 64), content filter toggle, and generation permissions (everyone, ops only, or allowlist).
 - Config changes take effect on reload (`/shapecraft reload`) — no server restart required.
 - Players without generation permission can still place and use previously generated blocks.
 
@@ -267,7 +271,7 @@ Server owners need control over generation and visibility into usage.
 
 **Acceptance Criteria:**
 
-- `/shapecraft status` — Shows license state, generations remaining (trial) or "unlimited" (paid), block pool usage (e.g., "42/64 slots used"), and active player count.
+- `/shapecraft status` — Shows license state, generations remaining this period (e.g., "183/250 remaining" for paid, "12/50 remaining" for trial), block pool usage (e.g., "42/64 slots used"), and active player count.
 - `/shapecraft activate <code>` — Activates a paid license.
 - `/shapecraft reload` — Reloads config from disk.
 - All admin commands require op permissions.
@@ -359,8 +363,23 @@ Server owners need control over generation and visibility into usage.
 
 ---
 
+## Cost Model
+
+Based on Claude Sonnet 4.6 pricing ($3/MTok input, $15/MTok output):
+
+| Metric | Value |
+|--------|-------|
+| Input tokens per generation | ~4,000 (system prompt + RAG examples + description) |
+| Output tokens per generation | ~1,000 (model JSON + blockstate JSON) |
+| Cost per generation (worst case) | ~$0.03 |
+| Cost per generation (with prompt caching) | ~$0.02 |
+| Max monthly cost per paid server (250 × $0.03) | $7.50 |
+| Subscription price | $8.00/month |
+| Minimum margin per paid server | $0.50/month (worst case, all 250 used, no caching) |
+| Typical margin per paid server | ~$4.00/month (avg 200 generations, with caching) |
+| Trial cost per server (50 × $0.03) | $1.50 |
+| Breakeven: trials per paying server | 5.3 trials per conversion (well above 20% target) |
+
 ## Open Questions
 
-1. **Pricing** — StreamCraft is $15/month, SynthCraft is $10/month. ShapeCraft's per-generation Claude API cost is low (~$0.01–0.03 per generation). What's the right price point? Must cover costs with margin while being an easy yes for server owners.
-2. **Trial budget** — How many trial generations strike the right balance between getting servers hooked and motivating conversion? SynthCraft uses ~50 generations worth of credit as a reference point.
-3. **Vanilla texture licensing** — Vanilla textures are Mojang's assets. Do generated composites that modify them have redistribution implications for exported resource packs?
+1. **Vanilla texture licensing** — Vanilla textures are Mojang's assets. Do generated composites that modify them have redistribution implications for exported resource packs?
