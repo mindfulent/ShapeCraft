@@ -73,7 +73,7 @@ The core loop — describe a block, get a block.
 **Acceptance Criteria:**
 
 - A GUI (opened via keybind or command variant) shows a rotating 3D preview of the generated block.
-- I can accept (block goes to inventory) or discard (nothing consumed, I can try again).
+- I can accept (block goes to inventory) or discard (generation count is still deducted since the API cost was incurred, but no block slot is consumed).
 - The preview shows the block with its textures applied, not just wireframe geometry.
 
 ### US-004: Generate a Block Family
@@ -85,6 +85,7 @@ The core loop — describe a block, get a block.
 - `/shapecraft family <description>` produces a base block plus slab, stairs, and wall variants.
 - All variants share the same visual style and textures.
 - Each variant behaves correctly (slabs are half-height, stairs are climbable, etc.).
+- Family generation counts as 4 generations (one per variant) against both monthly and daily caps.
 
 ---
 
@@ -120,7 +121,7 @@ Organizing, finding, and reusing generated blocks.
 
 - `/shapecraft info` shows how many block slots remain out of the total available.
 - When I'm within 5 of the limit, generation confirmations include a remaining-count warning.
-- When the limit is reached, the error message is clear and suggests exporting or removing unused blocks.
+- When the limit is reached, the error message is clear and directs the server owner to subscribe on Patreon to unlock more generations.
 
 ---
 

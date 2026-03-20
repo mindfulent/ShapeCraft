@@ -1,0 +1,11 @@
+{
+  "required": true,
+  "package": "com.shapecraft.client.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "SpriteLoaderMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

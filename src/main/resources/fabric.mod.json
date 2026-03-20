@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "shapecraft",
+  "version": "${version}",
+  "name": "ShapeCraft",
+  "description": "Generate custom block models from natural language descriptions using AI — describe a block and it appears in-game, no restart needed",
+  "authors": ["Slash"],
+  "contact": {
+    "homepage": "https://theblock.academy",
+    "sources": "https://github.com/mindfulent/ShapeCraft",
+    "issues": "https://github.com/mindfulent/ShapeCraft/issues"
+  },
+  "license": "ARR",
+  "icon": "assets/shapecraft/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["com.shapecraft.ShapeCraft"],
+    "client": ["com.shapecraft.client.ShapeCraftClient"]
+  },
+  "mixins": [
+    {
+      "config": "shapecraft-client.mixins.json",
+      "environment": "client"
+    }
+  ],
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "minecraft": "~1.21.1",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}

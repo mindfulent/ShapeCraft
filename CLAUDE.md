@@ -4,21 +4,59 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-ShapeCraft is a Minecraft mod (Fabric 1.21.1) that generates custom block models from natural language descriptions using an LLM backed by a RAG index of vanilla block definitions. Status: **concept stage** — no mod code exists yet.
+ShapeCraft is a Minecraft mod (Fabric 1.21.1) that generates custom block models from natural language descriptions using Claude Sonnet 4.6 backed by a RAG index of ~2,100 vanilla block definitions. Status: **v0.3.0** — Phases 0–10 implemented (scaffold, networking, backend client, model injection, persistence, license, backend API routes, RAG corpus, content filter, texture tinting, multiplayer hardening). Backend routes and Discord cog live in theblockacademy and slashAI repos respectively.
 
-Design brief: `docs/BRIEF.md`
+Design docs: `docs/BRIEF.md` (design brief), `docs/PRD.md` (product requirements), `docs/TDD.md` (technical design)
 
-## Architecture (Planned)
+## Architecture
 
-Five components, per the brief:
+### Implemented (Phases 0–10)
 
-1. **Vanilla RAG Index** — ~2,100 block model JSONs enriched with semantic descriptions, indexed by structural metadata and semantic embedding
-2. **LLM Backend** — Takes user prompt + retrieved examples → valid block model JSON (cloud API first, local fallback later)
-3. **Texture Pipeline** — Three tiers: vanilla recolor (MVP), procedural composite, image model generation
-4. **Validator** — Ensures generated JSON is structurally valid (0–16 coordinate range, valid faces/textures/parent chains)
-5. **Resource Pack Injector** — Runtime injection via Fabric resource pack API (no restart needed)
+| Component | Key Classes |
+|-----------|-------------|
+| Block Pool (64 slots) | `ShapeCraft.java`, `PoolBlock`, `PoolBlockEntity`, `BlockPoolManager` |
+| Networking (8 payloads) | `ShapeCraftNetworking`, `ShapeCraftClientNetworking`, `payloads/*` |
+| Backend Client | `BackendClient`, `GenerationManager`, `GenerationRequest/Result` |
+| Model Validator | `ModelValidator` (11 rules), `VanillaAssets` |
+| Model Injection | `ShapeCraftModelPlugin`, `DynamicBlockModel`, `DynamicBakedModel`, `ModelCache` |
+| Persistence | `WorldDataManager` (SavedData), `PoolBlockEntity` NBT |
+| License System | `LicenseManager`, `LicenseValidator`, `LicenseStore`, `DailyCapTracker` |
+| Content Filter | `ContentFilter` (blocklist-based) |
+| Texture Tinting | `DynamicTextureManager`, `SpriteLoaderMixin` (client mixin) |
+| Config | `ShapeCraftConfig` |
+| Commands | `ShapeCraftCommand` (`/shapecraft <desc>`, `info`, `status`, `activate`, `reload`) |
+| Backend API | theblockacademy: `routes/shapecraft/*` (trial, validate, activate, generate, health) |
+| RAG Corpus | theblockacademy: `scripts/prepare-shapecraft-corpus.ts`, pgvector + Voyage embeddings |
+| Discord Cog | slashAI: `commands/shapecraft_commands.py` (9 owner-only commands) |
 
-**MVP scope:** `/shapecraft <description>` → RAG retrieval → LLM generates model JSON inheriting from existing parent → vanilla texture selection → runtime resource pack injection → placeable block in creative tab.
+### Not Yet Implemented
+
+- Preview GUI, block families, export
+- Texture Pipeline Tier 3 (full compositing)
+
+## Source Layout
+
+```
+src/main/java/com/shapecraft/          # Server + common code
+├── ShapeCraft.java                    # ModInitializer entrypoint
+├── ShapeCraftConstants.java           # MOD_ID, limits, URLs
+├── block/                             # PoolBlock, PoolBlockEntity, BlockPoolManager
+├── command/                           # ShapeCraftCommand (Brigadier)
+├── config/                            # ShapeCraftConfig, LicenseStore, DailyCapTracker, ContentFilter
+├── generation/                        # BackendClient, GenerationManager, Request/Result
+├── license/                           # LicenseManager, LicenseState, LicenseValidator
+├── network/                           # ShapeCraftNetworking
+│   └── payloads/                      # 8 payload records (C2S + S2C)
+├── persistence/                       # WorldDataManager (SavedData)
+└── validation/                        # ModelValidator, VanillaAssets
+
+src/client/java/com/shapecraft/client/ # Client-only code
+├── ShapeCraftClient.java              # ClientModInitializer
+├── mixin/                             # SpriteLoaderMixin (texture atlas injection)
+├── model/                             # ModelLoadingPlugin, DynamicBlockModel, DynamicBakedModel, ModelCache
+├── network/                           # ShapeCraftClientNetworking
+└── render/                            # DynamicTextureManager (tinted textures)
+```
 
 ## Vanilla Assets Corpus
 
@@ -39,8 +77,6 @@ Models use a constrained DSL of axis-aligned boxes in a 0–16 coordinate space 
 
 ## Build Commands
 
-No build system exists yet. When the mod is scaffolded, it will use:
-
 ```bash
 # Fabric mod (Java 21 required)
 JAVA_HOME="/c/Users/slash/AppData/Roaming/PrismLauncher/java/java-runtime-delta" PATH="$JAVA_HOME/bin:$PATH" ./gradlew build
@@ -56,8 +92,12 @@ JAVA_HOME="/c/Users/slash/AppData/Roaming/PrismLauncher/java/java-runtime-delta"
 2. **Bump version** — Update the version in `README.md` title (`# ShapeCraft vX.Y.Z`) and add a new section in `CHANGELOG.md`
 3. **Version scheme** — Semver: patch for fixes, minor for features, major for breaking changes. Pre-1.0, minor bumps are fine for most additions.
 
-## Key Technical Constraints
+## Key Technical Details
 
-- **Block registry timing** — Minecraft registers blocks at startup. Visual injection works via runtime resource packs, but functional blocks (collision, hardness) may need a pre-registered pool of "blank" blocks assigned dynamically.
-- **Multiplayer** — All clients need matching generated models. Requires sync protocol or server-side resource pack distribution.
-- **Coordinate space** — All element coordinates must be in 0–16 range. Face references and texture paths must resolve. Parent chains must exist. The validator must enforce all of this.
+- **Block pool:** 64 pre-registered blocks (`shapecraft:custom_0` through `custom_63`) with PoolBlockEntity storing model data
+- **Model injection:** Uses Fabric's `ModelLoadingPlugin` + `BlockStateResolver` — no blockstates/ JSON files needed. `DynamicBlockModel` (UnbakedModel) delegates to `FaceBakery.bakeQuad()` for quad building
+- **Directional placement:** `BlockModelRotation.X0_Y{0,90,180,270}` per FACING state, passed as ModelState to FaceBakery
+- **Collision shapes:** Computed from model JSON elements → union of `Block.box()` via `Shapes.or()`
+- **Resource reload:** MVP triggers full `reloadResourcePacks()` on generation complete — causes loading screen. Post-MVP should target model rebake without full reload
+- **License:** 5-state FSM (UNINITIALIZED→TRIAL→ACTIVE, with GRACE/EXPIRED). Auto-provisions 50-gen trial. 10/day per-player cap, 250/month per-server
+- **Backend URL:** Configurable in `config/shapecraft/config.json`, defaults to `https://theblockacademy.com`
