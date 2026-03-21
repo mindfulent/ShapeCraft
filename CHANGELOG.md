@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.4.7 — 2026-03-21
+
+Fix texture orientation on generated blocks — faces showed different cropped regions of the texture because position-based UV mapping sampled different texture areas depending on element placement within the 0–16 coordinate space.
+
+### Origin-Based Auto-UV
+- `DynamicBlockModel.computeDefaultUV()` — replaced vanilla position-based UV calculation with origin-based `[0, 0, faceWidth, faceHeight]` mapping. Every face now samples the texture from (0,0) scaled to its actual dimensions, giving consistent visual appearance across all elements.
+
+### Backend Prompt Update
+- `prompt.ts` (theblockacademy repo) — replaced vague UV guideline with explicit origin-based UV instructions and worked example, so Claude generates UVs matching the client's auto-calculation.
+
 ## v0.4.6 — 2026-03-21
 
 Fix invisible textures on generated blocks — faces rendered correct outlines/shapes but were invisible due to missing render layer and unmerged parent textures.

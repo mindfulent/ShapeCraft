@@ -308,18 +308,19 @@ public class DynamicBlockModel implements UnbakedModel {
     }
 
     /**
-     * Compute default UV coordinates from element bounds for a given face direction.
-     * Matches vanilla FaceBakery's auto-UV calculation.
+     * Compute default UV coordinates from element dimensions for a given face direction.
+     * Uses origin-based mapping [0, 0, faceWidth, faceHeight] so every face samples the
+     * texture from the same starting point, giving consistent appearance across elements.
      */
     private static float[] computeDefaultUV(Vector3f from, Vector3f to, Direction dir) {
-        return switch (dir) {
-            case DOWN  -> new float[]{from.x(), 16 - to.z(), to.x(), 16 - from.z()};
-            case UP    -> new float[]{from.x(), from.z(), to.x(), to.z()};
-            case NORTH -> new float[]{16 - to.x(), 16 - to.y(), 16 - from.x(), 16 - from.y()};
-            case SOUTH -> new float[]{from.x(), 16 - to.y(), to.x(), 16 - from.y()};
-            case WEST  -> new float[]{from.z(), 16 - to.y(), to.z(), 16 - from.y()};
-            case EAST  -> new float[]{16 - to.z(), 16 - to.y(), 16 - from.z(), 16 - from.y()};
-        };
+        float w, h;
+        switch (dir) {
+            case UP, DOWN -> { w = to.x() - from.x(); h = to.z() - from.z(); }
+            case NORTH, SOUTH -> { w = to.x() - from.x(); h = to.y() - from.y(); }
+            case WEST, EAST -> { w = to.z() - from.z(); h = to.y() - from.y(); }
+            default -> { w = 16; h = 16; }
+        }
+        return new float[]{0, 0, w, h};
     }
 
     private static BlockElementRotation parseElementRotation(JsonObject json) {
