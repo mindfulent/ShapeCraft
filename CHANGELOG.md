@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.4.6 — 2026-03-21
+
+Fix invisible textures on generated blocks — faces rendered correct outlines/shapes but were invisible due to missing render layer and unmerged parent textures.
+
+### Render Layer Registration
+- `ShapeCraftClient` — register all 64 pool blocks with `RenderType.cutout()` via `BlockRenderLayerMap`. Without this, blocks defaulted to SOLID render layer which discards transparent textures entirely.
+
+### Parent Texture Inheritance Fix
+- `DynamicBlockModel.bakeQuads()` — always merge parent textures via `putIfAbsent` even when the model has inline elements. Previously parent textures were only merged when elements came from the parent, leaving `#variable` references unresolved → null sprites → invisible faces.
+
+### Diagnostics
+- `DynamicBlockModel.resolveSprite()` — log warning when a `#variable` texture reference can't be resolved, making texture issues immediately diagnosable
+- Downgraded v0.4.4 per-element/per-vertex diagnostic logging from `info` to `debug` to reduce log spam
+
 ## v0.4.5 — 2026-03-21
 
 Fix block outline shape not syncing to clients — outlines showed full cube on the client side because PoolBlockEntity lacked vanilla block entity sync methods.

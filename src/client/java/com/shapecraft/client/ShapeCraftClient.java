@@ -1,13 +1,17 @@
 package com.shapecraft.client;
 
+import com.shapecraft.ShapeCraft;
 import com.shapecraft.ShapeCraftConstants;
 import com.shapecraft.client.model.ShapeCraftModelPlugin;
 import com.shapecraft.client.network.ShapeCraftClientNetworking;
 import com.shapecraft.network.payloads.HandshakeC2S;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.blockrenderlayer.v1.BlockRenderLayerMap;
 import net.fabricmc.fabric.api.client.model.loading.v1.ModelLoadingPlugin;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import net.minecraft.client.renderer.RenderType;
+import net.minecraft.world.level.block.Block;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,6 +24,12 @@ public class ShapeCraftClient implements ClientModInitializer {
 
         // Register model loading plugin — intercepts model loading for pool blocks
         ModelLoadingPlugin.register(new ShapeCraftModelPlugin());
+
+        // Register CUTOUT render layer for all pool blocks — supports binary alpha (glass/leaves style)
+        // Without this, pool blocks default to SOLID which discards transparent textures
+        for (Block block : ShapeCraft.POOL_BLOCKS) {
+            BlockRenderLayerMap.INSTANCE.putBlock(block, RenderType.cutout());
+        }
 
         ShapeCraftClientNetworking.registerReceivers();
 

@@ -126,8 +126,19 @@ public class DynamicBlockModel implements UnbakedModel {
                 return null; // No elements and no parent
             }
 
+            // Always merge parent textures — even when model has inline elements,
+            // parent textures provide defaults for unresolved #variable references
+            if (parentName != null && !usedParent) {
+                ParentResolver.ResolvedParent resolved = ParentResolver.resolve(parentName);
+                if (resolved != null) {
+                    for (var entry : resolved.textures().entrySet()) {
+                        textureMap.putIfAbsent(entry.getKey(), entry.getValue());
+                    }
+                }
+            }
+
             // Debug logging for cross/rotated model diagnosis
-            LOGGER.info("[Model] Slot {} | parent={} usedParent={} | elementCount={} | rotation={}",
+            LOGGER.debug("[Model] Slot {} | parent={} usedParent={} | elementCount={} | rotation={}",
                     slotIndex, parentName, usedParent, elements.size(), rotation);
 
             {
@@ -144,7 +155,7 @@ public class DynamicBlockModel implements UnbakedModel {
                         elemRotation = parseElementRotation(elem.getAsJsonObject("rotation"));
                     }
 
-                    LOGGER.info("[Model] Slot {} elem[{}] from=[{},{},{}] to=[{},{},{}] elemRot={}",
+                    LOGGER.debug("[Model] Slot {} elem[{}] from=[{},{},{}] to=[{},{},{}] elemRot={}",
                             slotIndex, elemIdx,
                             from.x(), from.y(), from.z(), to.x(), to.y(), to.z(),
                             elemRotation != null
@@ -187,7 +198,7 @@ public class DynamicBlockModel implements UnbakedModel {
                                 uv = new BlockFaceUV(defaultUV,
                                         faceJson.has("rotation") ? faceJson.get("rotation").getAsInt() : 0);
                                 if (elemIdx == 0) {
-                                    LOGGER.info("[Model] Slot {} elem[0].{} computeDefaultUV=[{},{},{},{}]",
+                                    LOGGER.debug("[Model] Slot {} elem[0].{} computeDefaultUV=[{},{},{},{}]",
                                             slotIndex, dir.getName(),
                                             defaultUV[0], defaultUV[1], defaultUV[2], defaultUV[3]);
                                 }
@@ -215,7 +226,7 @@ public class DynamicBlockModel implements UnbakedModel {
                                     float vx = Float.intBitsToFloat(verts[vi * 8]);
                                     float vy = Float.intBitsToFloat(verts[vi * 8 + 1]);
                                     float vz = Float.intBitsToFloat(verts[vi * 8 + 2]);
-                                    LOGGER.info("[Model] Slot {} quad vertex[{}] pos=[{},{},{}]",
+                                    LOGGER.debug("[Model] Slot {} quad vertex[{}] pos=[{},{},{}]",
                                             slotIndex, vi, vx, vy, vz);
                                 }
                             }
@@ -274,7 +285,8 @@ public class DynamicBlockModel implements UnbakedModel {
         }
 
         if (resolved.startsWith("#")) {
-            return null; // Unresolved variable
+            LOGGER.warn("[Model] Unresolved texture variable '{}' — no mapping found in texture map", resolved);
+            return null;
         }
 
         // Parse texture path
