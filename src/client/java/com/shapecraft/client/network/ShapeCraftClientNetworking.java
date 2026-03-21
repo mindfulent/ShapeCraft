@@ -2,10 +2,14 @@ package com.shapecraft.client.network;
 
 import com.shapecraft.client.ShapeCraftClient;
 import com.shapecraft.client.model.ModelCache;
+import com.shapecraft.client.model.RuntimeModelBaker;
 import com.shapecraft.network.payloads.*;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
+
+import java.util.HashMap;
+import java.util.Map;
 
 public class ShapeCraftClientNetworking {
 
@@ -46,10 +50,9 @@ public class ShapeCraftClientNetworking {
                     payload.textureTints()
             ));
 
-            // Trigger resource reload to rebake models
+            // Runtime-bake the model and refresh chunks — no loading screen
             Minecraft.getInstance().execute(() -> {
-                ShapeCraftClient.LOGGER.info("[Model] Triggering resource reload for new block...");
-                Minecraft.getInstance().reloadResourcePacks();
+                RuntimeModelBaker.bakeAndCache(payload.slotIndex(), payload.modelJson());
 
                 var player = Minecraft.getInstance().player;
                 if (player != null) {
@@ -74,7 +77,7 @@ public class ShapeCraftClientNetworking {
         ClientPlayNetworking.registerGlobalReceiver(BlockSyncS2C.TYPE, (payload, context) -> {
             ShapeCraftClient.LOGGER.info("[Sync] Received {} block(s)", payload.entries().size());
 
-            boolean hadNewData = false;
+            Map<Integer, String> newEntries = new HashMap<>();
             for (var entry : payload.entries()) {
                 if (!ModelCache.has(entry.slotIndex())) {
                     ModelCache.put(entry.slotIndex(), new ModelCache.ModelData(
@@ -83,14 +86,13 @@ public class ShapeCraftClientNetworking {
                             entry.modelJson(),
                             entry.textureTints()
                     ));
-                    hadNewData = true;
+                    newEntries.put(entry.slotIndex(), entry.modelJson());
                 }
             }
 
-            if (hadNewData) {
+            if (!newEntries.isEmpty()) {
                 Minecraft.getInstance().execute(() -> {
-                    ShapeCraftClient.LOGGER.info("[Model] Triggering resource reload for synced blocks...");
-                    Minecraft.getInstance().reloadResourcePacks();
+                    RuntimeModelBaker.bakeAndCacheBatch(newEntries);
                 });
             }
         });

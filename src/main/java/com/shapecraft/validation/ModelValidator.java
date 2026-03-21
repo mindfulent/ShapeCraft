@@ -18,7 +18,7 @@ public class ModelValidator {
     );
 
     private static final Set<String> VALID_ELEMENT_KEYS = Set.of(
-            "from", "to", "rotation", "shade", "faces", "name"
+            "from", "to", "rotation", "shade", "faces", "name", "comment"
     );
 
     private static final Set<String> VALID_FACE_KEYS = Set.of(

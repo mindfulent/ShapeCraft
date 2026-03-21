@@ -70,6 +70,8 @@ public class LicenseManager {
                     state = LicenseState.TRIAL;
                     lastValidated = Instant.now();
                     persist();
+                    // Wire license key to backend client
+                    ShapeCraft.getInstance().getBackendClient().setAuthToken(licenseKey);
                     ShapeCraft.LOGGER.info("Trial provisioned: {} generations", response.generationCredits());
                 }))
                 .exceptionally(e -> {
@@ -138,6 +140,8 @@ public class LicenseManager {
                     monthlyUsed = 0;
                     graceStart = null;
                     persist();
+                    // Wire new license key to backend client
+                    ShapeCraft.getInstance().getBackendClient().setAuthToken(licenseKey);
                     ShapeCraft.LOGGER.info("License activated successfully");
                 }))
                 .exceptionally(e -> {

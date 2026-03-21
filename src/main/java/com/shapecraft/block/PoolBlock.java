@@ -1,10 +1,14 @@
 package com.shapecraft.block;
 
 import com.mojang.serialization.MapCodec;
+import com.shapecraft.ShapeCraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.EntityBlock;
 import net.minecraft.world.level.block.HorizontalDirectionalBlock;
@@ -20,15 +24,26 @@ public class PoolBlock extends HorizontalDirectionalBlock implements EntityBlock
 
     public static final MapCodec<PoolBlock> CODEC = simpleCodec(PoolBlock::new);
 
+    private final int slotIndex;
+
     @Override
     protected MapCodec<? extends HorizontalDirectionalBlock> codec() {
         return CODEC;
     }
 
     public PoolBlock(Properties properties) {
+        this(properties, -1);
+    }
+
+    public PoolBlock(Properties properties, int slotIndex) {
         super(properties);
+        this.slotIndex = slotIndex;
         this.registerDefaultState(this.stateDefinition.any()
                 .setValue(FACING, Direction.NORTH));
+    }
+
+    public int getSlotIndex() {
+        return slotIndex;
     }
 
     @Override
@@ -53,6 +68,22 @@ public class PoolBlock extends HorizontalDirectionalBlock implements EntityBlock
             }
         }
         return Shapes.block();
+    }
+
+    @Override
+    public void setPlacedBy(Level level, BlockPos pos, BlockState state, @Nullable LivingEntity placer, ItemStack stack) {
+        if (!level.isClientSide() && slotIndex >= 0) {
+            BlockEntity be = level.getBlockEntity(pos);
+            if (be instanceof PoolBlockEntity poolBe) {
+                BlockPoolManager pool = ShapeCraft.getInstance().getBlockPoolManager();
+                BlockPoolManager.BlockSlotData data = pool.getSlot(slotIndex);
+                if (data != null) {
+                    poolBe.setSlotIndex(slotIndex);
+                    poolBe.setDisplayName(data.displayName());
+                    poolBe.setModelJson(data.modelJson());
+                }
+            }
+        }
     }
 
     @Nullable

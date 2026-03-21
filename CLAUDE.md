@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-ShapeCraft is a Minecraft mod (Fabric 1.21.1) that generates custom block models from natural language descriptions using Claude Sonnet 4.6 backed by a RAG index of ~2,100 vanilla block definitions. Status: **v0.3.0** — Phases 0–10 implemented (scaffold, networking, backend client, model injection, persistence, license, backend API routes, RAG corpus, content filter, texture tinting, multiplayer hardening). Backend routes and Discord cog live in theblockacademy and slashAI repos respectively.
+ShapeCraft is a Minecraft mod (Fabric 1.21.1) that generates custom block models from natural language descriptions using Claude Sonnet 4.6 backed by a RAG index of ~2,100 vanilla block definitions. Status: **v0.4.2** — Phases 0–10 implemented (scaffold, networking, backend client, model injection, persistence, license, backend API routes, RAG corpus, content filter, texture tinting, multiplayer hardening). Runtime model hot-swap eliminates resource reload on generation. Parent-only models resolved via pre-computed registry. Backend routes and Discord cog live in theblockacademy and slashAI repos respectively.
 
 Design docs: `docs/BRIEF.md` (design brief), `docs/PRD.md` (product requirements), `docs/TDD.md` (technical design)
 
@@ -17,7 +17,7 @@ Design docs: `docs/BRIEF.md` (design brief), `docs/PRD.md` (product requirements
 | Block Pool (64 slots) | `ShapeCraft.java`, `PoolBlock`, `PoolBlockEntity`, `BlockPoolManager` |
 | Networking (8 payloads) | `ShapeCraftNetworking`, `ShapeCraftClientNetworking`, `payloads/*` |
 | Backend Client | `BackendClient`, `GenerationManager`, `GenerationRequest/Result` |
-| Model Validator | `ModelValidator` (11 rules), `VanillaAssets` |
+| Model Validator | `ModelValidator` (11 rules), `VanillaAssets`, `ParentResolver` |
 | Model Injection | `ShapeCraftModelPlugin`, `DynamicBlockModel`, `DynamicBakedModel`, `ModelCache` |
 | Persistence | `WorldDataManager` (SavedData), `PoolBlockEntity` NBT |
 | License System | `LicenseManager`, `LicenseValidator`, `LicenseStore`, `DailyCapTracker` |
@@ -91,6 +91,18 @@ JAVA_HOME="/c/Users/slash/AppData/Roaming/PrismLauncher/java/java-runtime-delta"
 1. **Update `CHANGELOG.md`** — Add an entry under the new version with a summary of changes
 2. **Bump version** — Update the version in `README.md` title (`# ShapeCraft vX.Y.Z`) and add a new section in `CHANGELOG.md`
 3. **Version scheme** — Semver: patch for fixes, minor for features, major for breaking changes. Pre-1.0, minor bumps are fine for most additions.
+
+## JAR Deployment for Testing
+
+When copying built JARs to `LocalServer/mods/` or the Prism Launcher TBA instance, **always delete older versions of the JAR first**. Stale JARs cause duplicate-mod crashes or load the wrong version.
+
+```bash
+# Delete old versions, then copy new
+rm -f ../LocalServer/mods/shapecraft-*.jar
+rm -f ../TBA/mods/shapecraft-*.jar
+cp build/libs/shapecraft-X.Y.Z.jar ../LocalServer/mods/
+cp build/libs/shapecraft-X.Y.Z.jar ../TBA/mods/
+```
 
 ## Key Technical Details
 

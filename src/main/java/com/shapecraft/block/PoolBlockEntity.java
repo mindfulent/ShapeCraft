@@ -5,6 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.shapecraft.ShapeCraft;
+import com.shapecraft.validation.ParentResolver;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
@@ -50,7 +51,7 @@ public class PoolBlockEntity extends BlockEntity {
 
     public void setModelJson(String modelJson) {
         this.modelJson = modelJson;
-        this.cachedShape = null; // Invalidate cached shape
+        computeShape();
         setChanged();
     }
 
@@ -66,13 +67,25 @@ public class PoolBlockEntity extends BlockEntity {
 
         try {
             JsonObject model = JsonParser.parseString(modelJson).getAsJsonObject();
-            if (!model.has("elements")) {
+
+            // Resolve elements: inline first, then parent fallback
+            JsonArray elements;
+            if (model.has("elements")) {
+                elements = model.getAsJsonArray("elements");
+            } else if (model.has("parent")) {
+                ParentResolver.ResolvedParent resolved = ParentResolver.resolve(
+                        model.get("parent").getAsString());
+                if (resolved == null || resolved.elements().isEmpty()) {
+                    cachedShape = Shapes.block();
+                    return;
+                }
+                elements = resolved.elements();
+            } else {
                 cachedShape = Shapes.block();
                 return;
             }
 
             VoxelShape combined = Shapes.empty();
-            JsonArray elements = model.getAsJsonArray("elements");
             for (JsonElement elemJson : elements) {
                 JsonObject elem = elemJson.getAsJsonObject();
                 if (!elem.has("from") || !elem.has("to")) continue;

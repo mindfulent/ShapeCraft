@@ -63,7 +63,7 @@ public class ShapeCraft implements ModInitializer {
             PoolBlock block = new PoolBlock(BlockBehaviour.Properties.of()
                     .mapColor(MapColor.STONE)
                     .strength(1.5f, 6.0f)
-                    .noOcclusion());
+                    .noOcclusion(), i);
 
             Block registeredBlock = Registry.register(BuiltInRegistries.BLOCK, blockId, block);
             POOL_BLOCKS[i] = registeredBlock;
@@ -127,6 +127,11 @@ public class ShapeCraft implements ModInitializer {
             int port = server.getPort();
             licenseManager.initialize(server, ip, port);
             LOGGER.info("ShapeCraft license state: {}", licenseManager.getState());
+
+            // Wire license key to backend client for authenticated API calls
+            if (licenseManager.getLicenseKey() != null) {
+                backendClient.setAuthToken(licenseManager.getLicenseKey());
+            }
         });
 
         // Periodic license validation

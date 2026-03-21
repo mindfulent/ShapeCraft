@@ -2,7 +2,7 @@ package com.shapecraft;
 
 public final class ShapeCraftConstants {
     public static final String MOD_ID = "shapecraft";
-    public static final String MOD_VERSION = "0.3.0";
+    public static final String MOD_VERSION = "0.4.0";
     public static final int PROTOCOL_VERSION = 1;
 
     // Block pool
@@ -22,7 +22,7 @@ public final class ShapeCraftConstants {
     public static final int VALIDATION_POLL_TICKS = 6000; // ~5 minutes
 
     // URLs
-    public static final String UPGRADE_URL = "https://theblockacademy.com/shapecraft";
+    public static final String UPGRADE_URL = "https://theblock.academy/shapecraft";
     public static final String DISCORD_URL = "https://discord.gg/ggvCkBD9vm";
 
     // Backend

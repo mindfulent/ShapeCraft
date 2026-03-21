@@ -1,6 +1,5 @@
 package com.shapecraft.client.model;
 
-import com.mojang.math.Transformation;
 import com.shapecraft.ShapeCraft;
 import com.shapecraft.ShapeCraftConstants;
 import com.shapecraft.client.ShapeCraftClient;
@@ -19,28 +18,19 @@ public class ShapeCraftModelPlugin implements ModelLoadingPlugin {
 
     @Override
     public void onInitializeModelLoader(Context pluginContext) {
-        ShapeCraftClient.LOGGER.info("[Model] Registering block state resolvers for {} pool blocks",
+        // Clear stale quads (baked against previous atlas layout).
+        // bake() will re-populate the cache using the engine's spriteGetter.
+        BakedModelCache.clear();
+        ShapeCraftClient.LOGGER.info("[Model] Registering block state resolvers for {} pool blocks (cache cleared)",
                 ShapeCraftConstants.DEFAULT_POOL_SIZE);
 
         for (int i = 0; i < ShapeCraftConstants.DEFAULT_POOL_SIZE; i++) {
             final int slotIndex = i;
             pluginContext.registerBlockStateResolver(ShapeCraft.POOL_BLOCKS[slotIndex], context -> {
-                ModelCache.ModelData modelData = ModelCache.get(slotIndex);
-
                 for (BlockState state : context.block().getStateDefinition().getPossibleStates()) {
-                    if (modelData != null) {
-                        Direction facing = state.getValue(HorizontalDirectionalBlock.FACING);
-                        BlockModelRotation rotation = getBlockRotation(facing);
-
-                        DynamicBlockModel unbaked = new DynamicBlockModel(
-                                modelData.modelJson(), slotIndex, rotation);
-                        context.setModel(state, unbaked);
-                    } else {
-                        // No model data — use missing model placeholder
-                        // getOrLoadModel with missing ID will return the missing model
-                        context.setModel(state, context.getOrLoadModel(
-                                net.minecraft.resources.ResourceLocation.withDefaultNamespace("block/stone")));
-                    }
+                    Direction facing = state.getValue(HorizontalDirectionalBlock.FACING);
+                    // DynamicBlockModel.bake() writes to BakedModelCache using engine's spriteGetter.
+                    context.setModel(state, new DynamicBlockModel(slotIndex, facing));
                 }
             });
         }

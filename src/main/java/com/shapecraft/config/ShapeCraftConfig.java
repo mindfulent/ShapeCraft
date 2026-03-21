@@ -19,7 +19,7 @@ public class ShapeCraftConfig {
     private int poolSize = ShapeCraftConstants.DEFAULT_POOL_SIZE;
     private int maxGenerationsPerPlayerPerDay = ShapeCraftConstants.DEFAULT_DAILY_CAP;
     private int maxPromptLength = ShapeCraftConstants.MAX_PROMPT_LENGTH;
-    private String backendUrl = "https://theblockacademy.com";
+    private String backendUrl = "https://theblock.academy/api";
     private boolean contentFilterEnabled = true;
     private boolean debug = false;
 

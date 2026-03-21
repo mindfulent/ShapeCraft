@@ -2,6 +2,7 @@ package com.shapecraft.client.model;
 
 import com.google.gson.*;
 import com.shapecraft.client.ShapeCraftClient;
+import com.shapecraft.validation.ParentResolver;
 import net.minecraft.client.renderer.block.model.*;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.client.resources.model.*;
@@ -10,22 +11,27 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.inventory.InventoryMenu;
 import org.joml.Vector3f;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.*;
 import java.util.function.Function;
 
 /**
  * UnbakedModel implementation that parses generated JSON and bakes it using FaceBakery.
+ * bake() writes to BakedModelCache using the engine's spriteGetter (guaranteed correct after atlas stitching).
+ * RuntimeModelBaker also writes to BakedModelCache for runtime hot-swap.
  */
 public class DynamicBlockModel implements UnbakedModel {
 
-    private final String modelJson;
-    private final int slotIndex;
-    private final BlockModelRotation blockRotation;
+    private static final Logger LOGGER = LoggerFactory.getLogger("ShapeCraft/Model");
 
-    public DynamicBlockModel(String modelJson, int slotIndex, BlockModelRotation blockRotation) {
-        this.modelJson = modelJson;
+    private final int slotIndex;
+    private final Direction facing;
+
+    public DynamicBlockModel(int slotIndex, Direction facing) {
         this.slotIndex = slotIndex;
-        this.blockRotation = blockRotation;
+        this.facing = facing;
     }
 
     @Override
@@ -41,8 +47,26 @@ public class DynamicBlockModel implements UnbakedModel {
     @Override
     public BakedModel bake(ModelBaker baker, Function<Material, TextureAtlasSprite> spriteGetter,
                            ModelState modelState) {
-        // Use our stored rotation for FACING-based rotation
-        ModelState effectiveState = blockRotation != null ? blockRotation : modelState;
+        // Use the engine's spriteGetter to bake quads — guaranteed correct after atlas stitching.
+        // This handles resource reloads: stale quads were cleared in onInitializeModelLoader().
+        ModelCache.ModelData data = ModelCache.get(slotIndex);
+        if (data != null && data.modelJson() != null && !data.modelJson().isEmpty()) {
+            BlockModelRotation rotation = ShapeCraftModelPlugin.getBlockRotation(facing);
+            BakedModelCache.FacingQuads fq = bakeQuads(data.modelJson(), slotIndex, rotation, spriteGetter);
+            if (fq != null) {
+                BakedModelCache.mergeFacing(slotIndex, facing, fq);
+            }
+        }
+        return new DynamicBakedModel(slotIndex, facing);
+    }
+
+    /**
+     * Bakes model JSON into quads for a single facing variant.
+     * Called from both the reload path (bake()) and runtime hot-swap (RuntimeModelBaker).
+     */
+    public static BakedModelCache.FacingQuads bakeQuads(String modelJson, int slotIndex,
+                                                         BlockModelRotation rotation,
+                                                         Function<Material, TextureAtlasSprite> spriteGetter) {
         try {
             JsonObject model = JsonParser.parseString(modelJson).getAsJsonObject();
 
@@ -79,8 +103,35 @@ public class DynamicBlockModel implements UnbakedModel {
 
             FaceBakery faceBakery = new FaceBakery();
 
+            // Resolve elements: inline first, then parent fallback
+            JsonArray elements;
+            boolean usedParent = false;
+            String parentName = model.has("parent") ? model.get("parent").getAsString() : null;
             if (model.has("elements")) {
-                JsonArray elements = model.getAsJsonArray("elements");
+                elements = model.getAsJsonArray("elements");
+            } else if (parentName != null) {
+                ParentResolver.ResolvedParent resolved = ParentResolver.resolve(parentName);
+                if (resolved == null) {
+                    ShapeCraftClient.LOGGER.warn("[Model] Unknown parent '{}' for slot {}",
+                            parentName, slotIndex);
+                    return null;
+                }
+                elements = resolved.elements();
+                usedParent = true;
+                // Merge parent textures (parent provides defaults, child overrides)
+                for (var entry : resolved.textures().entrySet()) {
+                    textureMap.putIfAbsent(entry.getKey(), entry.getValue());
+                }
+            } else {
+                return null; // No elements and no parent
+            }
+
+            // Debug logging for cross/rotated model diagnosis
+            LOGGER.info("[Model] Slot {} | parent={} usedParent={} | elementCount={} | rotation={}",
+                    slotIndex, parentName, usedParent, elements.size(), rotation);
+
+            {
+                int elemIdx = 0;
                 for (JsonElement elemJson : elements) {
                     JsonObject elem = elemJson.getAsJsonObject();
 
@@ -92,6 +143,16 @@ public class DynamicBlockModel implements UnbakedModel {
                     if (elem.has("rotation")) {
                         elemRotation = parseElementRotation(elem.getAsJsonObject("rotation"));
                     }
+
+                    LOGGER.info("[Model] Slot {} elem[{}] from=[{},{},{}] to=[{},{},{}] elemRot={}",
+                            slotIndex, elemIdx,
+                            from.x(), from.y(), from.z(), to.x(), to.y(), to.z(),
+                            elemRotation != null
+                                    ? String.format("axis=%s angle=%.1f origin=[%.1f,%.1f,%.1f] rescale=%b",
+                                        elemRotation.axis(), elemRotation.angle(),
+                                        elemRotation.origin().x(), elemRotation.origin().y(), elemRotation.origin().z(),
+                                        elemRotation.rescale())
+                                    : "none");
 
                     boolean shade = !elem.has("shade") || elem.get("shade").getAsBoolean();
 
@@ -121,9 +182,15 @@ public class DynamicBlockModel implements UnbakedModel {
                                         uvArr.get(3).getAsFloat()
                                 }, faceJson.has("rotation") ? faceJson.get("rotation").getAsInt() : 0);
                             } else {
-                                // Auto-calculate UV from element coordinates
-                                uv = new BlockFaceUV(null,
+                                // Auto-calculate UV from element coordinates (vanilla doesn't accept null uvs)
+                                float[] defaultUV = computeDefaultUV(from, to, dir);
+                                uv = new BlockFaceUV(defaultUV,
                                         faceJson.has("rotation") ? faceJson.get("rotation").getAsInt() : 0);
+                                if (elemIdx == 0) {
+                                    LOGGER.info("[Model] Slot {} elem[0].{} computeDefaultUV=[{},{},{},{}]",
+                                            slotIndex, dir.getName(),
+                                            defaultUV[0], defaultUV[1], defaultUV[2], defaultUV[3]);
+                                }
                             }
 
                             // Tint index
@@ -138,7 +205,20 @@ public class DynamicBlockModel implements UnbakedModel {
 
                             // Apply Y rotation for directional variants via ModelState
                             BakedQuad quad = faceBakery.bakeQuad(from, to, face, sprite, dir,
-                                    effectiveState, elemRotation, shade);
+                                    rotation, elemRotation, shade);
+
+                            // Log first quad's vertex positions for diagnosis
+                            if (elemIdx == 0 && dir == Direction.UP) {
+                                int[] verts = quad.getVertices();
+                                // Each vertex: 8 ints (x,y,z as float bits, then color, u, v, light, normal)
+                                for (int vi = 0; vi < 4; vi++) {
+                                    float vx = Float.intBitsToFloat(verts[vi * 8]);
+                                    float vy = Float.intBitsToFloat(verts[vi * 8 + 1]);
+                                    float vz = Float.intBitsToFloat(verts[vi * 8 + 2]);
+                                    LOGGER.info("[Model] Slot {} quad vertex[{}] pos=[{},{},{}]",
+                                            slotIndex, vi, vx, vy, vz);
+                                }
+                            }
 
                             // Place in correct list based on cullface
                             Direction cullface = face.cullForDirection();
@@ -149,29 +229,39 @@ public class DynamicBlockModel implements UnbakedModel {
                             }
                         }
                     }
+                    elemIdx++;
                 }
             }
 
-            boolean ambientOcclusion = !model.has("ambientocclusion") || model.get("ambientocclusion").getAsBoolean();
+            // Ambient occlusion: child setting takes priority, then resolved parent, then default true
+            boolean ambientOcclusion;
+            if (model.has("ambientocclusion")) {
+                ambientOcclusion = model.get("ambientocclusion").getAsBoolean();
+            } else if (model.has("parent")) {
+                ParentResolver.ResolvedParent resolved = ParentResolver.resolve(
+                        model.get("parent").getAsString());
+                ambientOcclusion = resolved == null || resolved.ambientOcclusion();
+            } else {
+                ambientOcclusion = true;
+            }
 
-            return new DynamicBakedModel(faceQuads, unculledQuads, ambientOcclusion, particleSprite);
+            return new BakedModelCache.FacingQuads(faceQuads, unculledQuads, ambientOcclusion, particleSprite);
 
         } catch (Exception e) {
-            ShapeCraftClient.LOGGER.error("[Model] Failed to bake model for slot {}: {}", slotIndex, e.getMessage());
-            // Return null — Fabric will use missing model
+            ShapeCraftClient.LOGGER.error("[Model] Failed to bake quads for slot {}: {}", slotIndex, e.getMessage());
             return null;
         }
     }
 
-    private TextureAtlasSprite getSprite(String varName, Map<String, String> textureMap,
-                                         Function<Material, TextureAtlasSprite> spriteGetter) {
+    private static TextureAtlasSprite getSprite(String varName, Map<String, String> textureMap,
+                                                Function<Material, TextureAtlasSprite> spriteGetter) {
         String path = textureMap.get(varName);
         if (path == null) return null;
         return resolveSprite(path, textureMap, spriteGetter);
     }
 
-    private TextureAtlasSprite resolveSprite(String ref, Map<String, String> textureMap,
-                                              Function<Material, TextureAtlasSprite> spriteGetter) {
+    private static TextureAtlasSprite resolveSprite(String ref, Map<String, String> textureMap,
+                                                    Function<Material, TextureAtlasSprite> spriteGetter) {
         // Resolve variable references (#name)
         String resolved = ref;
         int depth = 0;
@@ -203,6 +293,21 @@ public class DynamicBlockModel implements UnbakedModel {
                 arr.get(0).getAsFloat(),
                 arr.get(1).getAsFloat(),
                 arr.get(2).getAsFloat());
+    }
+
+    /**
+     * Compute default UV coordinates from element bounds for a given face direction.
+     * Matches vanilla FaceBakery's auto-UV calculation.
+     */
+    private static float[] computeDefaultUV(Vector3f from, Vector3f to, Direction dir) {
+        return switch (dir) {
+            case DOWN  -> new float[]{from.x(), 16 - to.z(), to.x(), 16 - from.z()};
+            case UP    -> new float[]{from.x(), from.z(), to.x(), to.z()};
+            case NORTH -> new float[]{16 - to.x(), 16 - to.y(), 16 - from.x(), 16 - from.y()};
+            case SOUTH -> new float[]{from.x(), 16 - to.y(), to.x(), 16 - from.y()};
+            case WEST  -> new float[]{from.z(), 16 - to.y(), to.z(), 16 - from.y()};
+            case EAST  -> new float[]{16 - to.z(), 16 - to.y(), 16 - from.z(), 16 - from.y()};
+        };
     }
 
     private static BlockElementRotation parseElementRotation(JsonObject json) {

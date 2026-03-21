@@ -1,5 +1,70 @@
 # Changelog
 
+## v0.4.4 — 2026-03-21
+
+Fix block selection outline showing full cube instead of model-accurate bounds on first placement.
+
+### Block Outline Shape Fix
+- `PoolBlock` — added `slotIndex` field so each pool block knows its slot; `setPlacedBy()` copies model data from `BlockPoolManager` to the `PoolBlockEntity` at placement time
+- `PoolBlockEntity.setModelJson()` — now calls `computeShape()` immediately instead of just nullifying cached shape, ensuring VoxelShape is ready for outline rendering
+- `ShapeCraft` registration loop passes slot index `i` to `PoolBlock` constructor
+
+Previously, placed blocks had no model data in their entity until world reload (NBT round-trip), so `getShape()` fell back to a full 1×1×1 cube.
+
+## v0.4.3 — 2026-03-21
+
+Fix ModelValidator rejecting `comment` keys in elements; add diagnostic logging for cross-model rendering offset.
+
+### Bug Fixes
+- `ModelValidator` — added `"comment"` to `VALID_ELEMENT_KEYS` set so Claude-generated documentation fields no longer trigger V-002 errors
+- Backend prompt — added guideline #9 discouraging extra keys in elements (defense-in-depth)
+
+### Debug Diagnostics
+- `DynamicBlockModel.bakeQuads()` — temporary diagnostic logging for cross/rotated model rendering offset investigation:
+  - Logs parent resolution, element count, and rotation per slot
+  - Logs per-element from/to coordinates and element rotation details
+  - Logs first element's auto-computed UV values when `computeDefaultUV` is invoked
+  - Logs first quad (UP face) vertex positions to verify block-local coordinate range
+
+## v0.4.2 — 2026-03-21
+
+Fix invisible blocks when Claude generates parent-only models (no inline elements).
+
+### Parent Model Resolution
+- `ParentResolver` — lazy-loaded singleton registry of 50 pre-computed parent models with resolved elements and texture maps
+- `parent_models.json` — bundled resource (~50KB) with flattened geometry for all `KNOWN_PARENTS`
+- `DynamicBlockModel.bakeQuads()` — falls back to `ParentResolver` when model has `parent` but no `elements`; merges parent texture map (child overrides via `putIfAbsent`)
+- `PoolBlockEntity.computeShape()` — same parent resolution fallback for collision shapes
+- Ambient occlusion inherited from resolved parent when child doesn't set it
+- Backend prompt updated to require inline `elements` (defense-in-depth; client-side resolution handles legacy/unexpected parent-only models)
+
+## v0.4.1 — 2026-03-20
+
+Fix block textures being replaced with distorted cobblestone/water after generation.
+
+### Self-Validating Baked Model Cache
+- `BakedModelCache` tracks a reload generation counter — incremented on every resource reload (atlas rebuild)
+- `BakedSlotData` stores the generation at bake time; `getQuads()` returns null for stale entries (generation mismatch)
+- `DynamicBakedModel.getQuads()` lazy-rebakes from `ModelCache` using the current atlas when cache is empty or stale
+- This makes the system resilient to atlas rebuilds regardless of when/why they happen (F3+T, server resource packs, mod-triggered reloads)
+- `ShapeCraftModelPlugin.onInitializeModelLoader()` increments reload generation on each resource reload
+- `DynamicBlockModel.bake()` remains a thin delegate (no cache write) — `RuntimeModelBaker` and lazy-rebake are the only writers
+- Removed `RuntimeModelBaker.rebakeAll()` and resource reload listener from `ShapeCraftClient` (superseded by lazy rebaking)
+
+## v0.4.0 — 2026-03-20
+
+Eliminate resource reload on block generation — no more loading screen.
+
+### Runtime Model Hot-Swap
+- `BakedModelCache` — shared mutable store of baked quad data keyed by slot index, thread-safe via ConcurrentHashMap
+- `RuntimeModelBaker` — bakes model JSON into BakedModelCache at runtime using existing block atlas sprites, no reload needed
+- `DynamicBakedModel` refactored to delegate to BakedModelCache by (slotIndex, facing) — picks up new quads on next `getQuads()` call
+- `DynamicBlockModel.bakeQuads()` extracted as public static method for reuse by both reload path and runtime hot-swap
+- `ShapeCraftModelPlugin` always creates delegate models (empty slots render invisible instead of stone fallback)
+- `ShapeCraftClientNetworking` uses `RuntimeModelBaker.bakeAndCache()` + `levelRenderer.allChanged()` instead of `reloadResourcePacks()`
+- Block sync on join uses `bakeAndCacheBatch()` for single chunk re-mesh across all synced blocks
+- F3+T and resource pack changes still work via normal `ShapeCraftModelPlugin` → `bake()` path
+
 ## v0.3.0 — 2026-03-20
 
 Backend integration — Phases 6–10 implemented. Full end-to-end generation pipeline.
