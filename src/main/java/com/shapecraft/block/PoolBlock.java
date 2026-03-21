@@ -81,6 +81,7 @@ public class PoolBlock extends HorizontalDirectionalBlock implements EntityBlock
                     poolBe.setSlotIndex(slotIndex);
                     poolBe.setDisplayName(data.displayName());
                     poolBe.setModelJson(data.modelJson());
+                    level.sendBlockUpdated(pos, state, state, Block.UPDATE_ALL);
                 }
             }
         }

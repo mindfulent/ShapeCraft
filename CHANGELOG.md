@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.4.5 — 2026-03-21
+
+Fix block outline shape not syncing to clients — outlines showed full cube on the client side because PoolBlockEntity lacked vanilla block entity sync methods.
+
+### Client-Side Block Entity Sync
+- `PoolBlockEntity` — added `getUpdatePacket()` and `getUpdateTag()` overrides to enable vanilla block entity client sync (sends SlotIndex, DisplayName, ModelJson via `saveWithoutMetadata()`)
+- `PoolBlock.setPlacedBy()` — added `sendBlockUpdated()` call after setting model data, triggering the client-bound block entity packet
+
+This covers all sync scenarios: block placement (including multiplayer broadcast), chunk load, and player join.
+
 ## v0.4.4 — 2026-03-21
 
 Fix block selection outline showing full cube instead of model-accurate bounds on first placement.
