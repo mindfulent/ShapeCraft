@@ -1,5 +1,41 @@
 # Changelog
 
+## v0.4.18 — 2026-03-22
+
+First-class trapdoor support — trapdoors are now a distinct block type with proper horizontal-to-vertical open transform, collision shapes, and interaction handling.
+
+### New `"trapdoor"` Block Type
+
+Previously, trapdoors were routed through the door code path (`block_type: "door"`), which applied vertical-panel transforms (X↔Z swap) designed for doors. This was completely wrong for trapdoors — horizontal panels that flip to vertical when opened.
+
+- Backend prompt now distinguishes `"trapdoor"` from `"door"` — trapdoors, hatches, floor grates, and cellar doors get their own geometry guidance (flat horizontal panel ~3 units thick at Y=0)
+- `PoolBlockEntity`, `BlockPoolManager.BlockSlotData`, and `ModelCache.ModelData` all gain `isTrapdoor()` convenience methods
+
+### Trapdoor Open Transform (Y↔Z Swap)
+
+Unlike doors (X↔Z swap), trapdoors swap Y↔Z coordinates to flip from horizontal to vertical:
+- Closed: `[0,0,0] → [16,3,16]` — thin along Y at bottom
+- Open: `[0,0,0] → [16,16,3]` — thin along Z, then standard FACING rotation positions it on the correct edge
+- Face remapping: up↔south, down↔north (east/west unchanged)
+- `DynamicBlockModel.normalizeTrapdoorPanel()` — translates panel to Y=0
+- `DynamicBlockModel.transformTrapdoorOpen()` — Y↔Z swap + face remap
+
+### Collision Shapes
+
+- Closed: `Block.box(0, 0, 0, 16, 3, 16)` — same for all facings (symmetric horizontal slab)
+- Open: vertical slab per facing — NORTH=Z:0..3, SOUTH=Z:13..16, EAST=X:13..16, WEST=X:0..3
+
+### Interaction
+
+- Right-click toggles open/close with `WOODEN_TRAPDOOR_OPEN`/`CLOSE` sounds
+- No partner-half sync (trapdoors are single blocks, unlike doors)
+
+### Baking Pipeline
+
+- `DynamicBlockModel.bake()` — trapdoor branch applies normalize + Y↔Z swap, uses standard `getBlockRotation()` (not door rotation)
+- `RuntimeModelBaker` — trapdoor-aware `bakeHalf()`, new `bakeHalfTrapdoorOpen()` for runtime hot-swap
+- `bakeOpenVariants()` — trapdoor branch normalizes, transforms, and bakes open state
+
 ## v0.4.17 — 2026-03-22
 
 Fix open door collision — players can now walk through open doors.

@@ -72,6 +72,10 @@ public class PoolBlockEntity extends BlockEntity {
         return "door".equals(blockType);
     }
 
+    public boolean isTrapdoor() {
+        return "trapdoor".equals(blockType);
+    }
+
     /**
      * Computes a VoxelShape from the model JSON elements.
      * Union of all element bounding boxes.

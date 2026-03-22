@@ -51,6 +51,20 @@ public class PoolBlock extends HorizontalDirectionalBlock implements EntityBlock
     private static final VoxelShape DOOR_OPEN_EAST  = Block.box(0, 0, 13, 16, 16, 16);
     private static final VoxelShape DOOR_OPEN_SOUTH = Block.box(0, 0, 0, 3, 16, 16);
 
+    // Pre-computed trapdoor collision shapes.
+    // Closed: horizontal slab at bottom (same for all facings — symmetric in X/Z)
+    private static final VoxelShape TRAPDOOR_CLOSED = Block.box(0, 0, 0, 16, 3, 16);
+
+    // Open: vertical slab per facing (accounting for opposite-FACING convention).
+    // Player faces north → FACING=SOUTH → panel at Z=13..16 (south edge)
+    // Player faces south → FACING=NORTH → panel at Z=0..3 (north edge)
+    // Player faces east → FACING=WEST → panel at X=0..3 (west edge)
+    // Player faces west → FACING=EAST → panel at X=13..16 (east edge)
+    private static final VoxelShape TRAPDOOR_OPEN_NORTH = Block.box(0, 0, 0, 16, 16, 3);
+    private static final VoxelShape TRAPDOOR_OPEN_SOUTH = Block.box(0, 0, 13, 16, 16, 16);
+    private static final VoxelShape TRAPDOOR_OPEN_EAST  = Block.box(13, 0, 0, 16, 16, 16);
+    private static final VoxelShape TRAPDOOR_OPEN_WEST  = Block.box(0, 0, 0, 3, 16, 16);
+
     private final int slotIndex;
 
     @Override
@@ -114,6 +128,10 @@ public class PoolBlock extends HorizontalDirectionalBlock implements EntityBlock
     public VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
         BlockEntity be = level.getBlockEntity(pos);
         if (be instanceof PoolBlockEntity poolBe) {
+            if (poolBe.isTrapdoor()) {
+                Direction facing = state.getValue(FACING);
+                return state.getValue(OPEN) ? getTrapdoorOpenShape(facing) : TRAPDOOR_CLOSED;
+            }
             if (poolBe.isDoor()) {
                 Direction facing = state.getValue(FACING);
                 return state.getValue(OPEN) ? getDoorOpenShape(facing) : getDoorClosedShape(facing);
@@ -148,6 +166,16 @@ public class PoolBlock extends HorizontalDirectionalBlock implements EntityBlock
         };
     }
 
+    private static VoxelShape getTrapdoorOpenShape(Direction facing) {
+        return switch (facing) {
+            case NORTH -> TRAPDOOR_OPEN_NORTH;
+            case SOUTH -> TRAPDOOR_OPEN_SOUTH;
+            case EAST -> TRAPDOOR_OPEN_EAST;
+            case WEST -> TRAPDOOR_OPEN_WEST;
+            default -> TRAPDOOR_OPEN_NORTH;
+        };
+    }
+
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos,
                                                 Player player, BlockHitResult hitResult) {
@@ -156,23 +184,31 @@ public class PoolBlock extends HorizontalDirectionalBlock implements EntityBlock
         // Check block type — use BlockPoolManager (always available server-side)
         BlockPoolManager pool = ShapeCraft.getInstance().getBlockPoolManager();
         BlockPoolManager.BlockSlotData data = slotIndex >= 0 ? pool.getSlot(slotIndex) : null;
-        if (data == null || !data.isDoor()) return InteractionResult.PASS;
+        if (data == null) return InteractionResult.PASS;
+
+        boolean isDoor = data.isDoor();
+        boolean isTrapdoor = data.isTrapdoor();
+        if (!isDoor && !isTrapdoor) return InteractionResult.PASS;
 
         // Toggle OPEN
         boolean nowOpen = !state.getValue(OPEN);
         level.setBlock(pos, state.setValue(OPEN, nowOpen), Block.UPDATE_ALL);
 
-        // Toggle partner half
-        BlockHalf half = state.getValue(HALF);
-        BlockPos partnerPos = half == BlockHalf.LOWER ? pos.above() : pos.below();
-        BlockState partnerState = level.getBlockState(partnerPos);
-        if (partnerState.getBlock() instanceof PoolBlock pb && pb.getSlotIndex() == this.slotIndex) {
-            level.setBlock(partnerPos, partnerState.setValue(OPEN, nowOpen), Block.UPDATE_ALL);
+        // Toggle partner half (doors only — trapdoors are single blocks)
+        if (isDoor) {
+            BlockHalf half = state.getValue(HALF);
+            BlockPos partnerPos = half == BlockHalf.LOWER ? pos.above() : pos.below();
+            BlockState partnerState = level.getBlockState(partnerPos);
+            if (partnerState.getBlock() instanceof PoolBlock pb && pb.getSlotIndex() == this.slotIndex) {
+                level.setBlock(partnerPos, partnerState.setValue(OPEN, nowOpen), Block.UPDATE_ALL);
+            }
         }
 
-        // Sound
+        // Sound — trapdoors use trapdoor sounds, doors use door sounds
         level.playSound(null, pos,
-                nowOpen ? SoundEvents.WOODEN_DOOR_OPEN : SoundEvents.WOODEN_DOOR_CLOSE,
+                nowOpen
+                        ? (isTrapdoor ? SoundEvents.WOODEN_TRAPDOOR_OPEN : SoundEvents.WOODEN_DOOR_OPEN)
+                        : (isTrapdoor ? SoundEvents.WOODEN_TRAPDOOR_CLOSE : SoundEvents.WOODEN_DOOR_CLOSE),
                 SoundSource.BLOCKS, 1.0f, level.getRandom().nextFloat() * 0.1f + 0.9f);
 
         return InteractionResult.SUCCESS;

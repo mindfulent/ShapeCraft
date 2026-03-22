@@ -54,5 +54,9 @@ public class ModelCache {
         public boolean isDoor() {
             return "door".equals(blockType);
         }
+
+        public boolean isTrapdoor() {
+            return "trapdoor".equals(blockType);
+        }
     }
 }

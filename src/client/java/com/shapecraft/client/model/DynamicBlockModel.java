@@ -62,7 +62,8 @@ public class DynamicBlockModel implements UnbakedModel {
             // For non-doors: use open variant JSON if available, fall back to closed.
             String json;
             boolean isDoor = data.isDoor();
-            if (open && !isDoor) {
+            boolean isTrapdoor = data.isTrapdoor();
+            if (open && !isDoor && !isTrapdoor) {
                 // Non-door open state: use open variant, falling back to closed
                 json = (half == BlockHalf.UPPER
                         && data.upperModelJsonOpen() != null && !data.upperModelJsonOpen().isEmpty())
@@ -91,6 +92,12 @@ public class DynamicBlockModel implements UnbakedModel {
                     thinAlongZ = norm.thinAlongZ();
                     if (open) {
                         json = transformDoorOpen(json);
+                    }
+                }
+                if (isTrapdoor) {
+                    json = normalizeTrapdoorPanel(json);
+                    if (open) {
+                        json = transformTrapdoorOpen(json);
                     }
                 }
                 BlockModelRotation rotation;
@@ -257,6 +264,131 @@ public class DynamicBlockModel implements UnbakedModel {
             return model.toString();
         } catch (Exception e) {
             LOGGER.warn("[Model] Failed to transform door open state: {}", e.getMessage());
+            return modelJson;
+        }
+    }
+
+    /**
+     * Normalize a trapdoor model so the panel sits at Y=0 (bottom of the block).
+     * Claude may generate the panel at an arbitrary Y position; this snaps it to the floor.
+     */
+    public static String normalizeTrapdoorPanel(String modelJson) {
+        try {
+            JsonObject model = JsonParser.parseString(modelJson).getAsJsonObject();
+            if (!model.has("elements")) return modelJson;
+
+            JsonArray elements = model.getAsJsonArray("elements");
+            if (elements.isEmpty()) return modelJson;
+
+            // Find bounding box across all elements in Y axis
+            float minY = Float.MAX_VALUE;
+            for (JsonElement elemJson : elements) {
+                JsonObject elem = elemJson.getAsJsonObject();
+                JsonArray from = elem.getAsJsonArray("from");
+                minY = Math.min(minY, from.get(1).getAsFloat());
+            }
+
+            if (Math.abs(minY) < 0.01f) return modelJson; // Already at Y=0
+
+            float offset = -minY;
+
+            // Apply Y translation to all elements
+            JsonArray newElements = new JsonArray();
+            for (JsonElement elemJson : elements) {
+                JsonObject elem = elemJson.getAsJsonObject().deepCopy();
+                JsonArray from = elem.getAsJsonArray("from");
+                JsonArray to = elem.getAsJsonArray("to");
+                from.set(1, new JsonPrimitive(from.get(1).getAsFloat() + offset));
+                to.set(1, new JsonPrimitive(to.get(1).getAsFloat() + offset));
+
+                if (elem.has("rotation")) {
+                    JsonObject rot = elem.getAsJsonObject("rotation");
+                    if (rot.has("origin")) {
+                        JsonArray origin = rot.getAsJsonArray("origin");
+                        origin.set(1, new JsonPrimitive(origin.get(1).getAsFloat() + offset));
+                    }
+                }
+
+                newElements.add(elem);
+            }
+            model.add("elements", newElements);
+
+            LOGGER.debug("[Model] Normalized trapdoor panel: Y offset={}", String.format("%.1f", offset));
+
+            return model.toString();
+        } catch (Exception e) {
+            LOGGER.warn("[Model] Failed to normalize trapdoor panel: {}", e.getMessage());
+            return modelJson;
+        }
+    }
+
+    /**
+     * Transform trapdoor model JSON for open state by swapping Y↔Z coordinates and remapping faces.
+     * Starting from a horizontal panel at Y=0, this flips it to vertical at Z=0.
+     * Standard FACING rotation then positions it on the correct block edge.
+     */
+    public static String transformTrapdoorOpen(String modelJson) {
+        try {
+            JsonObject model = JsonParser.parseString(modelJson).getAsJsonObject();
+            if (!model.has("elements")) return modelJson;
+
+            JsonArray elements = model.getAsJsonArray("elements");
+            JsonArray newElements = new JsonArray();
+
+            for (JsonElement elemJson : elements) {
+                JsonObject elem = elemJson.getAsJsonObject().deepCopy();
+
+                // Swap Y↔Z in from/to
+                JsonArray from = elem.getAsJsonArray("from");
+                JsonArray to = elem.getAsJsonArray("to");
+                float fromY = from.get(1).getAsFloat(), fromZ = from.get(2).getAsFloat();
+                float toY = to.get(1).getAsFloat(), toZ = to.get(2).getAsFloat();
+                from.set(1, new JsonPrimitive(fromZ));
+                from.set(2, new JsonPrimitive(fromY));
+                to.set(1, new JsonPrimitive(toZ));
+                to.set(2, new JsonPrimitive(toY));
+
+                // Swap element rotation axis if present (y↔z)
+                if (elem.has("rotation")) {
+                    JsonObject rot = elem.getAsJsonObject("rotation");
+                    if (rot.has("axis")) {
+                        String axis = rot.get("axis").getAsString();
+                        if ("y".equals(axis)) rot.addProperty("axis", "z");
+                        else if ("z".equals(axis)) rot.addProperty("axis", "y");
+                    }
+                    if (rot.has("origin")) {
+                        JsonArray origin = rot.getAsJsonArray("origin");
+                        float oy = origin.get(1).getAsFloat(), oz = origin.get(2).getAsFloat();
+                        origin.set(1, new JsonPrimitive(oz));
+                        origin.set(2, new JsonPrimitive(oy));
+                    }
+                }
+
+                // Remap face keys: up→south, south→up, down→north, north→down (east/west unchanged)
+                if (elem.has("faces")) {
+                    JsonObject oldFaces = elem.getAsJsonObject("faces");
+                    JsonObject newFaces = new JsonObject();
+                    for (var entry : oldFaces.entrySet()) {
+                        String key = entry.getKey();
+                        String newKey = switch (key) {
+                            case "up" -> "south";
+                            case "south" -> "up";
+                            case "down" -> "north";
+                            case "north" -> "down";
+                            default -> key; // east, west unchanged
+                        };
+                        newFaces.add(newKey, entry.getValue());
+                    }
+                    elem.add("faces", newFaces);
+                }
+
+                newElements.add(elem);
+            }
+
+            model.add("elements", newElements);
+            return model.toString();
+        } catch (Exception e) {
+            LOGGER.warn("[Model] Failed to transform trapdoor open state: {}", e.getMessage());
             return modelJson;
         }
     }

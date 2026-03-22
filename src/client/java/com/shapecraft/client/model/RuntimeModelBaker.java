@@ -31,13 +31,14 @@ public class RuntimeModelBaker {
         ModelCache.ModelData data = ModelCache.get(slotIndex);
         Function<Material, TextureAtlasSprite> spriteGetter = getSpriteGetter();
         boolean isDoor = data != null && data.isDoor();
+        boolean isTrapdoor = data != null && data.isTrapdoor();
 
         // Bake closed LOWER variant
-        bakeHalf(slotIndex, BlockHalf.LOWER, modelJson, spriteGetter, false, isDoor);
+        bakeHalf(slotIndex, BlockHalf.LOWER, modelJson, spriteGetter, false, isDoor, isTrapdoor);
 
         // Bake closed UPPER variant if present
         if (upperModelJson != null && !upperModelJson.isEmpty()) {
-            bakeHalf(slotIndex, BlockHalf.UPPER, upperModelJson, spriteGetter, false, isDoor);
+            bakeHalf(slotIndex, BlockHalf.UPPER, upperModelJson, spriteGetter, false, isDoor, isTrapdoor);
         }
 
         // Bake open variants if present
@@ -51,10 +52,10 @@ public class RuntimeModelBaker {
             mc.levelRenderer.allChanged();
         }
 
-        ShapeCraftClient.LOGGER.info("[Model] Runtime-baked slot {} (tall={}, door={})",
+        ShapeCraftClient.LOGGER.info("[Model] Runtime-baked slot {} (tall={}, door={}, trapdoor={})",
                 slotIndex,
                 upperModelJson != null && !upperModelJson.isEmpty(),
-                data != null && data.isDoor());
+                isDoor, isTrapdoor);
     }
 
     /**
@@ -77,10 +78,11 @@ public class RuntimeModelBaker {
             ModelCache.ModelData data = entry.getValue();
 
             boolean isDoor = data.isDoor();
-            bakeHalf(slotIndex, BlockHalf.LOWER, data.modelJson(), spriteGetter, false, isDoor);
+            boolean isTrapdoor = data.isTrapdoor();
+            bakeHalf(slotIndex, BlockHalf.LOWER, data.modelJson(), spriteGetter, false, isDoor, isTrapdoor);
 
             if (data.upperModelJson() != null && !data.upperModelJson().isEmpty()) {
-                bakeHalf(slotIndex, BlockHalf.UPPER, data.upperModelJson(), spriteGetter, false, isDoor);
+                bakeHalf(slotIndex, BlockHalf.UPPER, data.upperModelJson(), spriteGetter, false, isDoor, isTrapdoor);
             }
 
             // Bake open variants
@@ -100,6 +102,7 @@ public class RuntimeModelBaker {
     private static void bakeOpenVariants(int slotIndex, ModelCache.ModelData data,
                                           Function<Material, TextureAtlasSprite> spriteGetter) {
         boolean isDoor = data.isDoor();
+        boolean isTrapdoor = data.isTrapdoor();
 
         if (isDoor) {
             // Doors: normalize to edge (get thin axis), apply X↔Z swap, bake with axis-aware rotation.
@@ -112,37 +115,45 @@ public class RuntimeModelBaker {
                 String openUpper = DynamicBlockModel.transformDoorOpen(upperNorm.json());
                 bakeHalfDoorOpen(slotIndex, BlockHalf.UPPER, openUpper, spriteGetter, upperNorm.thinAlongZ());
             }
+        } else if (isTrapdoor) {
+            // Trapdoors: normalize to Y=0, apply Y↔Z swap, bake with standard rotation.
+            String normalizedLower = DynamicBlockModel.normalizeTrapdoorPanel(data.modelJson());
+            String openLower = DynamicBlockModel.transformTrapdoorOpen(normalizedLower);
+            bakeHalfTrapdoorOpen(slotIndex, BlockHalf.LOWER, openLower, spriteGetter);
         } else {
             // Non-doors: bake separate open variant JSON if present
             String openJson = data.modelJsonOpen();
             if (openJson != null && !openJson.isEmpty()) {
-                bakeHalf(slotIndex, BlockHalf.LOWER, openJson, spriteGetter, true, false);
+                bakeHalf(slotIndex, BlockHalf.LOWER, openJson, spriteGetter, true, false, false);
             }
 
             String upperOpenJson = data.upperModelJsonOpen();
             if (upperOpenJson != null && !upperOpenJson.isEmpty()) {
-                bakeHalf(slotIndex, BlockHalf.UPPER, upperOpenJson, spriteGetter, true, false);
+                bakeHalf(slotIndex, BlockHalf.UPPER, upperOpenJson, spriteGetter, true, false, false);
             } else if (openJson != null && !openJson.isEmpty()
                     && data.upperModelJson() != null && !data.upperModelJson().isEmpty()) {
                 // Tall block with open lower but no open upper: fall back to closed upper
-                bakeHalf(slotIndex, BlockHalf.UPPER, data.upperModelJson(), spriteGetter, true, false);
+                bakeHalf(slotIndex, BlockHalf.UPPER, data.upperModelJson(), spriteGetter, true, false, false);
             }
         }
     }
 
     private static void bakeHalf(int slotIndex, BlockHalf half, String modelJson,
                                   Function<Material, TextureAtlasSprite> spriteGetter, boolean open) {
-        bakeHalf(slotIndex, half, modelJson, spriteGetter, open, false);
+        bakeHalf(slotIndex, half, modelJson, spriteGetter, open, false, false);
     }
 
     private static void bakeHalf(int slotIndex, BlockHalf half, String modelJson,
                                   Function<Material, TextureAtlasSprite> spriteGetter,
-                                  boolean open, boolean isDoor) {
+                                  boolean open, boolean isDoor, boolean isTrapdoor) {
         boolean thinAlongZ = true; // default
         if (isDoor) {
             DynamicBlockModel.NormalizedDoor norm = DynamicBlockModel.normalizeDoorPanel(modelJson);
             modelJson = norm.json();
             thinAlongZ = norm.thinAlongZ();
+        }
+        if (isTrapdoor) {
+            modelJson = DynamicBlockModel.normalizeTrapdoorPanel(modelJson);
         }
         final boolean finalThinZ = thinAlongZ;
         Map<Direction, BakedModelCache.FacingQuads> variants = new EnumMap<>(Direction.class);
@@ -168,6 +179,23 @@ public class RuntimeModelBaker {
         Map<Direction, BakedModelCache.FacingQuads> variants = new EnumMap<>(Direction.class);
         for (Direction facing : HORIZONTAL_FACINGS) {
             BlockModelRotation rotation = ShapeCraftModelPlugin.getDoorRotation(facing, true, originalThinZ);
+            BakedModelCache.FacingQuads fq = DynamicBlockModel.bakeQuads(transformedJson, slotIndex, rotation, spriteGetter);
+            if (fq != null) {
+                variants.put(facing, fq);
+            }
+        }
+        BakedModelCache.put(slotIndex, half, true, new BakedModelCache.BakedSlotData(variants));
+    }
+
+    /**
+     * Bake trapdoor open state: JSON has already been normalized + Y↔Z swapped.
+     * Uses standard block rotation (trapdoors don't need axis-aware door rotation).
+     */
+    private static void bakeHalfTrapdoorOpen(int slotIndex, BlockHalf half, String transformedJson,
+                                              Function<Material, TextureAtlasSprite> spriteGetter) {
+        Map<Direction, BakedModelCache.FacingQuads> variants = new EnumMap<>(Direction.class);
+        for (Direction facing : HORIZONTAL_FACINGS) {
+            BlockModelRotation rotation = ShapeCraftModelPlugin.getBlockRotation(facing);
             BakedModelCache.FacingQuads fq = DynamicBlockModel.bakeQuads(transformedJson, slotIndex, rotation, spriteGetter);
             if (fq != null) {
                 variants.put(facing, fq);
