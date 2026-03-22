@@ -43,9 +43,14 @@ public class WorldDataManager extends SavedData {
                 int slotIndex = slotTag.getInt("SlotIndex");
                 String displayName = slotTag.getString("DisplayName");
                 String modelJson = slotTag.getString("ModelJson");
+                String upperModelJson = slotTag.getString("UpperModelJson"); // defaults to "" if absent
+                String modelJsonOpen = slotTag.getString("ModelJsonOpen");
+                String upperModelJsonOpen = slotTag.getString("UpperModelJsonOpen");
+                String blockType = slotTag.getString("BlockType");
 
                 poolManager.setSlot(slotIndex, new BlockPoolManager.BlockSlotData(
-                        slotIndex, displayName, modelJson));
+                        slotIndex, displayName, modelJson, upperModelJson,
+                        modelJsonOpen, upperModelJsonOpen, blockType));
             }
             ShapeCraft.LOGGER.info("[Persistence] Loaded {} block slots from world data",
                     poolManager.getAssignedCount());
@@ -63,6 +68,10 @@ public class WorldDataManager extends SavedData {
             slotTag.putInt("SlotIndex", data.slotIndex());
             slotTag.putString("DisplayName", data.displayName());
             slotTag.putString("ModelJson", data.modelJson());
+            slotTag.putString("UpperModelJson", data.upperModelJson() != null ? data.upperModelJson() : "");
+            slotTag.putString("ModelJsonOpen", data.modelJsonOpen() != null ? data.modelJsonOpen() : "");
+            slotTag.putString("UpperModelJsonOpen", data.upperModelJsonOpen() != null ? data.upperModelJsonOpen() : "");
+            slotTag.putString("BlockType", data.blockType() != null ? data.blockType() : "");
             slots.add(slotTag);
         }
         tag.put("Slots", slots);

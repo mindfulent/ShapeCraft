@@ -152,18 +152,14 @@ public class LicenseManager {
 
     public boolean canGenerate(UUID playerUuid) {
         if (!isFeatureEnabled()) return false;
-        if (state == LicenseState.TRIAL && trialGenerationsRemaining <= 0) return false;
-        if (state == LicenseState.ACTIVE && monthlyUsed >= ShapeCraftConstants.MONTHLY_GENERATIONS) return false;
+        // Trial and monthly limits enforced by backend (source of truth).
+        // Local counters can become stale when activation happens externally.
         return dailyCapTracker.canGenerate(playerUuid);
     }
 
     public String getCannotGenerateReason(UUID playerUuid) {
         if (state == LicenseState.EXPIRED) return "License expired. Use /shapecraft activate <code> to reactivate.";
         if (state == LicenseState.UNINITIALIZED) return "License not initialized yet. Please wait...";
-        if (state == LicenseState.TRIAL && trialGenerationsRemaining <= 0)
-            return "Trial expired (0 generations remaining). Visit " + ShapeCraftConstants.UPGRADE_URL;
-        if (state == LicenseState.ACTIVE && monthlyUsed >= ShapeCraftConstants.MONTHLY_GENERATIONS)
-            return "Monthly generation limit reached (" + ShapeCraftConstants.MONTHLY_GENERATIONS + ").";
         if (!dailyCapTracker.canGenerate(playerUuid))
             return "Daily generation limit reached (" + ShapeCraftConstants.DEFAULT_DAILY_CAP + "/day). Try again tomorrow.";
         return "Generation not available.";
@@ -191,6 +187,8 @@ public class LicenseManager {
     public int getMonthlyUsed() { return monthlyUsed; }
     public Instant getLastValidated() { return lastValidated; }
     public DailyCapTracker getDailyCapTracker() { return dailyCapTracker; }
+    public boolean isTrialExhausted() { return state == LicenseState.TRIAL && trialGenerationsRemaining <= 0; }
+    public boolean isLicenseExpired() { return state == LicenseState.EXPIRED; }
 
     private void persist() {
         store.save(new LicenseStore.LicenseData(

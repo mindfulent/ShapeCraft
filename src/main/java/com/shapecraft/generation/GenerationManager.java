@@ -35,11 +35,13 @@ public class GenerationManager {
     public void submit(MinecraftServer server, ServerPlayer player, String description) {
         UUID playerUuid = player.getUUID();
 
-        // Check license
+        // Check license (local checks: expired/uninitialized state + daily cap only)
+        // Trial and monthly limits are enforced by the backend (source of truth)
         var licenseManager = ShapeCraft.getInstance().getLicenseManager();
         if (licenseManager != null && !licenseManager.canGenerate(playerUuid)) {
-            ServerPlayNetworking.send(player, new GenerationErrorS2C(
-                    licenseManager.getCannotGenerateReason(playerUuid)));
+            String reason = licenseManager.getCannotGenerateReason(playerUuid);
+            String errorCode = licenseManager.isLicenseExpired() ? GenerationErrorS2C.CODE_LICENSE_EXPIRED : "";
+            ServerPlayNetworking.send(player, new GenerationErrorS2C(reason, errorCode));
             return;
         }
 
@@ -94,16 +96,35 @@ public class GenerationManager {
                     return;
                 }
 
+                // Validate upper model if present
+                if (result.upperModelJson() != null && !result.upperModelJson().isEmpty()) {
+                    var upperErrors = validator.validate(result.upperModelJson());
+                    if (!upperErrors.isEmpty()) {
+                        String errorMsg = "Generated upper model failed validation: " + String.join(", ", upperErrors);
+                        ShapeCraft.LOGGER.warn("[Generate] Upper model validation failed for '{}': {}", description, errorMsg);
+                        server.execute(() -> {
+                            ServerPlayNetworking.send(player, new GenerationErrorS2C(errorMsg));
+                        });
+                        return;
+                    }
+                }
+
                 // Assign slot on server thread
                 server.execute(() -> {
-                    int assignedSlot = pool.assignSlot(result.displayName(), result.modelJson());
+                    String upperModel = result.upperModelJson() != null ? result.upperModelJson() : "";
+                    String modelJsonOpen = result.modelJsonOpen() != null ? result.modelJsonOpen() : "";
+                    String upperModelJsonOpen = result.upperModelJsonOpen() != null ? result.upperModelJsonOpen() : "";
+                    String blockType = result.blockType() != null ? result.blockType() : "";
+
+                    int assignedSlot = pool.assignSlot(result.displayName(), result.modelJson(), upperModel,
+                            modelJsonOpen, upperModelJsonOpen, blockType);
                     if (assignedSlot < 0) {
                         ServerPlayNetworking.send(player, new GenerationErrorS2C("Block pool became full during generation."));
                         return;
                     }
 
-                    ShapeCraft.LOGGER.info("[Generate] Success — slot={}, name='{}', tokens={}/{}",
-                            assignedSlot, result.displayName(), result.inputTokens(), result.outputTokens());
+                    ShapeCraft.LOGGER.info("[Generate] Success — slot={}, name='{}', type='{}', tokens={}/{}",
+                            assignedSlot, result.displayName(), blockType, result.inputTokens(), result.outputTokens());
 
                     // Record generation for license tracking
                     if (licenseManager != null) {
@@ -118,7 +139,8 @@ public class GenerationManager {
 
                     // Broadcast to all players
                     GenerationCompleteS2C completePayload = new GenerationCompleteS2C(
-                            assignedSlot, result.displayName(), result.modelJson(), result.textureTints());
+                            assignedSlot, result.displayName(), result.modelJson(), upperModel,
+                            modelJsonOpen, upperModelJsonOpen, blockType, result.textureTints());
 
                     for (ServerPlayer p : server.getPlayerList().getPlayers()) {
                         ServerPlayNetworking.send(p, completePayload);
@@ -134,8 +156,16 @@ public class GenerationManager {
             } catch (Exception e) {
                 ShapeCraft.LOGGER.error("[Generate] Failed for '{}': {}", description, e.getMessage());
                 server.execute(() -> {
+                    // Detect 402 Payment Required (trial exhausted / monthly limit)
+                    String errorCode = "";
+                    Throwable cause = e.getCause() != null ? e.getCause() : e;
+                    if (cause instanceof BackendHttpException httpEx && httpEx.getStatusCode() == 402) {
+                        errorCode = GenerationErrorS2C.CODE_TRIAL_EXHAUSTED;
+                    } else if (cause instanceof BackendHttpException httpEx2 && httpEx2.getStatusCode() == 403) {
+                        errorCode = GenerationErrorS2C.CODE_LICENSE_EXPIRED;
+                    }
                     ServerPlayNetworking.send(player, new GenerationErrorS2C(
-                            "Generation failed: " + e.getMessage()));
+                            "Generation failed: " + cause.getMessage(), errorCode));
                 });
             } finally {
                 activeGenerations.remove(playerUuid);

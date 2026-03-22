@@ -7,8 +7,16 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
 public record GenerationErrorS2C(
-        String message
+        String message,
+        String errorCode
 ) implements CustomPacketPayload {
+
+    public static final String CODE_TRIAL_EXHAUSTED = "TRIAL_EXHAUSTED";
+    public static final String CODE_LICENSE_EXPIRED = "LICENSE_EXPIRED";
+
+    public GenerationErrorS2C(String message) {
+        this(message, "");
+    }
 
     public static final Type<GenerationErrorS2C> TYPE =
             new Type<>(ResourceLocation.fromNamespaceAndPath(ShapeCraftConstants.MOD_ID, "generation_error"));
@@ -18,10 +26,11 @@ public record GenerationErrorS2C(
 
     private static void write(RegistryFriendlyByteBuf buf, GenerationErrorS2C payload) {
         buf.writeUtf(payload.message);
+        buf.writeUtf(payload.errorCode);
     }
 
     private static GenerationErrorS2C read(RegistryFriendlyByteBuf buf) {
-        return new GenerationErrorS2C(buf.readUtf());
+        return new GenerationErrorS2C(buf.readUtf(), buf.readUtf());
     }
 
     @Override

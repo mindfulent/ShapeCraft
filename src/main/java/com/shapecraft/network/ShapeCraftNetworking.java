@@ -80,7 +80,12 @@ public class ShapeCraftNetworking {
         for (var entry : allSlots.entrySet()) {
             var data = entry.getValue();
             entries.add(new BlockSyncS2C.BlockSyncEntry(
-                    data.slotIndex(), data.displayName(), data.modelJson(), ""));
+                    data.slotIndex(), data.displayName(), data.modelJson(),
+                    data.upperModelJson() != null ? data.upperModelJson() : "",
+                    data.modelJsonOpen() != null ? data.modelJsonOpen() : "",
+                    data.upperModelJsonOpen() != null ? data.upperModelJsonOpen() : "",
+                    data.blockType() != null ? data.blockType() : "",
+                    ""));
         }
 
         ShapeCraft.LOGGER.info("[Sync] Sending {} blocks to {}",

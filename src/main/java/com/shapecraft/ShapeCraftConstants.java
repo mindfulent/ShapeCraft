@@ -3,7 +3,7 @@ package com.shapecraft;
 public final class ShapeCraftConstants {
     public static final String MOD_ID = "shapecraft";
     public static final String MOD_VERSION = "0.4.0";
-    public static final int PROTOCOL_VERSION = 1;
+    public static final int PROTOCOL_VERSION = 2;
 
     // Block pool
     public static final int DEFAULT_POOL_SIZE = 64;

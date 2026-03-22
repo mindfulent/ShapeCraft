@@ -127,5 +127,15 @@
   "block.shapecraft.custom_62": "Custom Block 62",
   "item.shapecraft.custom_62": "Custom Block 62",
   "block.shapecraft.custom_63": "Custom Block 63",
-  "item.shapecraft.custom_63": "Custom Block 63"
+  "item.shapecraft.custom_63": "Custom Block 63",
+
+  "shapecraft.trial_expired.title": "ShapeCraft Trial Ended",
+  "shapecraft.trial_expired.body1": "AI block generation uses cloud compute",
+  "shapecraft.trial_expired.body2": "and costs real money to run.",
+  "shapecraft.trial_expired.body3": "Your free trial generations have run out.",
+  "shapecraft.trial_expired.cta1": "Upgrade to keep generating custom blocks.",
+  "shapecraft.trial_expired.cta2": "Already upgraded? Use /shapecraft activate <code>",
+  "shapecraft.trial_expired.upgrade": "Upgrade ShapeCraft",
+  "shapecraft.trial_expired.discord": "Need Help? Join Discord",
+  "shapecraft.trial_expired.close": "Close"
 }

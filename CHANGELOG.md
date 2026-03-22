@@ -1,5 +1,46 @@
 # Changelog
 
+## v0.4.13 — 2026-03-21
+
+Fix door rotation: correct FACING convention mismatch, restore X↔Z hinge transform for multi-element doors, add closed door collision shapes.
+
+### Three Root Causes Fixed
+1. **FACING convention mismatch**: `PoolBlock` uses `.getOpposite()` but vanilla `DoorBlock` does not — our FACING is 180° off vanilla's, so every rotation lookup was wrong
+2. **Wrong closed rotation**: mapped EAST→Y0 (vanilla's table), but needed to apply vanilla's rotation for `facing.getOpposite()` — correct closed = standard + 90°
+3. **Center rotation breaks multi-element doors**: `BlockModelRotation` pivots around block center (0.5,0.5,0.5), displacing interior decorative elements; X↔Z coordinate swap transforms each element individually, preserving hinge corner (0,*,0)
+
+### Corrected Door Rotation
+- `getDoorRotation()` now uses standard block rotation + 90° for closed, + 180° for open
+- Closed: WEST→Y0, NORTH→Y90, EAST→Y180, SOUTH→Y270
+- Open: X↔Z swap handles hinge rotation, closed rotation handles facing
+
+### Restored X↔Z Hinge Transform
+- `DynamicBlockModel.transformDoorOpen()` restored — swaps X↔Z coordinates and remaps face keys (north↔west, south↔east) for correct multi-element door opening
+- Door open state: transform closed JSON, then bake with closed rotation (not open rotation)
+- `RuntimeModelBaker.bakeHalfDoorOpen()` applies same transform for runtime hot-swap
+
+### Collision Shapes for Both States
+- Added closed door shapes: WEST→X=0..3, NORTH→Z=0..3, EAST→X=13..16, SOUTH→Z=13..16
+- Fixed open door shapes: WEST→Z=0..3, NORTH→X=13..16, EAST→Z=13..16, SOUTH→X=0..3
+- `getShape()` now returns door-specific shapes for both closed and open states
+
+## v0.4.12 — 2026-03-21
+
+Fix door mechanics: client-side open rotation replaces unreliable Claude-generated open variants.
+
+### Door Panel Geometry Guidance
+- Prompt now instructs Claude to generate doors as flat panels ~3 units thick × 16 tall × 16 wide (`[0,0,0] to [3,16,16]`), preventing thin-pole closed doors
+- Removed `model_open` and `upper_model_open` from the prompt output format — Claude no longer generates separate open geometry
+
+### Client-Side Open Rotation
+- New `ShapeCraftModelPlugin.getBlockRotation(Direction, boolean)` overload adds +90° Y for open doors (NORTH→Y90, EAST→Y180, SOUTH→Y270, WEST→Y0), matching vanilla door behavior
+- `DynamicBlockModel.bake()` detects door blocks and reuses closed model JSON with open-aware rotation instead of selecting separate open variant JSON
+- `RuntimeModelBaker.bakeOpenVariants()` reuses closed model JSON with open rotation for doors; non-door blocks retain existing open variant baking
+- `RuntimeModelBaker.bakeHalf()` accepts `isDoor` flag to choose correct rotation strategy
+
+### Collision Shape Fix
+- Updated `PoolBlock` open door collision shapes to match rotated geometry: NORTH→south face, SOUTH→north face (were previously swapped)
+
 ## v0.4.10 — 2026-03-21
 
 Interactive door mechanics for generated blocks. Doors now open and close on right-click with sound effects, synced partner halves, and distinct open/closed model variants.

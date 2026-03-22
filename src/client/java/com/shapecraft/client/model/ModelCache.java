@@ -41,6 +41,18 @@ public class ModelCache {
             int slotIndex,
             String displayName,
             String modelJson,
+            String upperModelJson,
+            String modelJsonOpen,
+            String upperModelJsonOpen,
+            String blockType,
             String textureTints
-    ) {}
+    ) {
+        public ModelData(int slotIndex, String displayName, String modelJson, String upperModelJson, String textureTints) {
+            this(slotIndex, displayName, modelJson, upperModelJson, "", "", "", textureTints);
+        }
+
+        public boolean isDoor() {
+            return "door".equals(blockType);
+        }
+    }
 }

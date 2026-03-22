@@ -58,13 +58,17 @@ public class BackendClient {
                                 errorMsg = errBody.get("error").getAsString();
                             }
                         } catch (Exception ignored) {}
-                        throw new RuntimeException(errorMsg);
+                        throw new BackendHttpException(response.statusCode(), errorMsg);
                     }
 
                     JsonObject json = JsonParser.parseString(response.body()).getAsJsonObject();
                     return new GenerationResult(
                             json.has("generation_id") ? json.get("generation_id").getAsString() : "",
                             json.get("model_json").getAsString(),
+                            json.has("upper_model_json") ? json.get("upper_model_json").getAsString() : "",
+                            json.has("model_json_open") ? json.get("model_json_open").getAsString() : "",
+                            json.has("upper_model_json_open") ? json.get("upper_model_json_open").getAsString() : "",
+                            json.has("block_type") ? json.get("block_type").getAsString() : "",
                             json.get("display_name").getAsString(),
                             json.has("texture_tints") ? json.get("texture_tints").getAsString() : "",
                             json.has("input_tokens") ? json.get("input_tokens").getAsInt() : 0,

@@ -20,10 +20,23 @@ public class BlockPoolManager {
     }
 
     public synchronized int assignSlot(String displayName, String modelJson) {
+        return assignSlot(displayName, modelJson, "");
+    }
+
+    public synchronized int assignSlot(String displayName, String modelJson, String upperModelJson) {
+        return assignSlot(displayName, modelJson, upperModelJson, "", "", "");
+    }
+
+    public synchronized int assignSlot(String displayName, String modelJson, String upperModelJson,
+                                        String modelJsonOpen, String upperModelJsonOpen, String blockType) {
         int slot = getNextAvailable();
         if (slot < 0) return -1;
 
-        slots.put(slot, new BlockSlotData(slot, displayName, modelJson));
+        slots.put(slot, new BlockSlotData(slot, displayName,
+                modelJson, upperModelJson != null ? upperModelJson : "",
+                modelJsonOpen != null ? modelJsonOpen : "",
+                upperModelJsonOpen != null ? upperModelJsonOpen : "",
+                blockType != null ? blockType : ""));
         return slot;
     }
 
@@ -48,5 +61,22 @@ public class BlockPoolManager {
         return Map.copyOf(slots);
     }
 
-    public record BlockSlotData(int slotIndex, String displayName, String modelJson) {}
+    public record BlockSlotData(int slotIndex, String displayName, String modelJson, String upperModelJson,
+                                    String modelJsonOpen, String upperModelJsonOpen, String blockType) {
+        public BlockSlotData(int slotIndex, String displayName, String modelJson) {
+            this(slotIndex, displayName, modelJson, "", "", "", "");
+        }
+
+        public BlockSlotData(int slotIndex, String displayName, String modelJson, String upperModelJson) {
+            this(slotIndex, displayName, modelJson, upperModelJson, "", "", "");
+        }
+
+        public boolean isTall() {
+            return upperModelJson != null && !upperModelJson.isEmpty();
+        }
+
+        public boolean isDoor() {
+            return "door".equals(blockType);
+        }
+    }
 }

@@ -1,5 +1,6 @@
 package com.shapecraft.client.model;
 
+import com.shapecraft.block.BlockHalf;
 import com.shapecraft.client.ShapeCraftClient;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
@@ -24,21 +25,25 @@ public class RuntimeModelBaker {
     };
 
     /**
-     * Bake a single slot's model JSON into the cache and refresh chunks.
+     * Bake a single slot's model JSON (and optional upper/open models) into the cache and refresh chunks.
      */
-    public static void bakeAndCache(int slotIndex, String modelJson) {
+    public static void bakeAndCache(int slotIndex, String modelJson, String upperModelJson) {
+        ModelCache.ModelData data = ModelCache.get(slotIndex);
         Function<Material, TextureAtlasSprite> spriteGetter = getSpriteGetter();
+        boolean isDoor = data != null && data.isDoor();
 
-        Map<Direction, BakedModelCache.FacingQuads> variants = new EnumMap<>(Direction.class);
-        for (Direction facing : HORIZONTAL_FACINGS) {
-            BlockModelRotation rotation = ShapeCraftModelPlugin.getBlockRotation(facing);
-            BakedModelCache.FacingQuads fq = DynamicBlockModel.bakeQuads(modelJson, slotIndex, rotation, spriteGetter);
-            if (fq != null) {
-                variants.put(facing, fq);
-            }
+        // Bake closed LOWER variant
+        bakeHalf(slotIndex, BlockHalf.LOWER, modelJson, spriteGetter, false, isDoor);
+
+        // Bake closed UPPER variant if present
+        if (upperModelJson != null && !upperModelJson.isEmpty()) {
+            bakeHalf(slotIndex, BlockHalf.UPPER, upperModelJson, spriteGetter, false, isDoor);
         }
 
-        BakedModelCache.put(slotIndex, new BakedModelCache.BakedSlotData(variants));
+        // Bake open variants if present
+        if (data != null) {
+            bakeOpenVariants(slotIndex, data, spriteGetter);
+        }
 
         // Re-mesh all chunks so placed blocks pick up the new model
         Minecraft mc = Minecraft.getInstance();
@@ -46,32 +51,40 @@ public class RuntimeModelBaker {
             mc.levelRenderer.allChanged();
         }
 
-        ShapeCraftClient.LOGGER.info("[Model] Runtime-baked slot {} ({} variants)",
-                slotIndex, variants.size());
+        ShapeCraftClient.LOGGER.info("[Model] Runtime-baked slot {} (tall={}, door={})",
+                slotIndex,
+                upperModelJson != null && !upperModelJson.isEmpty(),
+                data != null && data.isDoor());
+    }
+
+    /**
+     * Backward-compatible overload for single-block models.
+     */
+    public static void bakeAndCache(int slotIndex, String modelJson) {
+        bakeAndCache(slotIndex, modelJson, "");
     }
 
     /**
      * Bake multiple slots at once, then refresh chunks a single time.
      */
-    public static void bakeAndCacheBatch(Map<Integer, String> slotJsons) {
-        if (slotJsons.isEmpty()) return;
+    public static void bakeAndCacheBatch(Map<Integer, ModelCache.ModelData> slotDataMap) {
+        if (slotDataMap.isEmpty()) return;
 
         Function<Material, TextureAtlasSprite> spriteGetter = getSpriteGetter();
 
-        for (var entry : slotJsons.entrySet()) {
+        for (var entry : slotDataMap.entrySet()) {
             int slotIndex = entry.getKey();
-            String modelJson = entry.getValue();
+            ModelCache.ModelData data = entry.getValue();
 
-            Map<Direction, BakedModelCache.FacingQuads> variants = new EnumMap<>(Direction.class);
-            for (Direction facing : HORIZONTAL_FACINGS) {
-                BlockModelRotation rotation = ShapeCraftModelPlugin.getBlockRotation(facing);
-                BakedModelCache.FacingQuads fq = DynamicBlockModel.bakeQuads(modelJson, slotIndex, rotation, spriteGetter);
-                if (fq != null) {
-                    variants.put(facing, fq);
-                }
+            boolean isDoor = data.isDoor();
+            bakeHalf(slotIndex, BlockHalf.LOWER, data.modelJson(), spriteGetter, false, isDoor);
+
+            if (data.upperModelJson() != null && !data.upperModelJson().isEmpty()) {
+                bakeHalf(slotIndex, BlockHalf.UPPER, data.upperModelJson(), spriteGetter, false, isDoor);
             }
 
-            BakedModelCache.put(slotIndex, new BakedModelCache.BakedSlotData(variants));
+            // Bake open variants
+            bakeOpenVariants(slotIndex, data, spriteGetter);
         }
 
         // Single chunk re-mesh for all baked slots
@@ -81,7 +94,77 @@ public class RuntimeModelBaker {
         }
 
         ShapeCraftClient.LOGGER.info("[Model] Runtime-baked {} slots in batch",
-                slotJsons.size());
+                slotDataMap.size());
+    }
+
+    private static void bakeOpenVariants(int slotIndex, ModelCache.ModelData data,
+                                          Function<Material, TextureAtlasSprite> spriteGetter) {
+        boolean isDoor = data.isDoor();
+
+        if (isDoor) {
+            // Doors: apply X↔Z swap on closed JSON, bake with CLOSED rotation.
+            // The swap handles the hinge rotation; closed rotation handles facing.
+            String openLower = DynamicBlockModel.transformDoorOpen(data.modelJson());
+            bakeHalfDoorOpen(slotIndex, BlockHalf.LOWER, openLower, spriteGetter);
+
+            if (data.upperModelJson() != null && !data.upperModelJson().isEmpty()) {
+                String openUpper = DynamicBlockModel.transformDoorOpen(data.upperModelJson());
+                bakeHalfDoorOpen(slotIndex, BlockHalf.UPPER, openUpper, spriteGetter);
+            }
+        } else {
+            // Non-doors: bake separate open variant JSON if present
+            String openJson = data.modelJsonOpen();
+            if (openJson != null && !openJson.isEmpty()) {
+                bakeHalf(slotIndex, BlockHalf.LOWER, openJson, spriteGetter, true, false);
+            }
+
+            String upperOpenJson = data.upperModelJsonOpen();
+            if (upperOpenJson != null && !upperOpenJson.isEmpty()) {
+                bakeHalf(slotIndex, BlockHalf.UPPER, upperOpenJson, spriteGetter, true, false);
+            } else if (openJson != null && !openJson.isEmpty()
+                    && data.upperModelJson() != null && !data.upperModelJson().isEmpty()) {
+                // Tall block with open lower but no open upper: fall back to closed upper
+                bakeHalf(slotIndex, BlockHalf.UPPER, data.upperModelJson(), spriteGetter, true, false);
+            }
+        }
+    }
+
+    private static void bakeHalf(int slotIndex, BlockHalf half, String modelJson,
+                                  Function<Material, TextureAtlasSprite> spriteGetter, boolean open) {
+        bakeHalf(slotIndex, half, modelJson, spriteGetter, open, false);
+    }
+
+    private static void bakeHalf(int slotIndex, BlockHalf half, String modelJson,
+                                  Function<Material, TextureAtlasSprite> spriteGetter,
+                                  boolean open, boolean isDoor) {
+        Map<Direction, BakedModelCache.FacingQuads> variants = new EnumMap<>(Direction.class);
+        for (Direction facing : HORIZONTAL_FACINGS) {
+            BlockModelRotation rotation = isDoor
+                    ? ShapeCraftModelPlugin.getDoorRotation(facing, false)
+                    : ShapeCraftModelPlugin.getBlockRotation(facing);
+            BakedModelCache.FacingQuads fq = DynamicBlockModel.bakeQuads(modelJson, slotIndex, rotation, spriteGetter);
+            if (fq != null) {
+                variants.put(facing, fq);
+            }
+        }
+        BakedModelCache.put(slotIndex, half, open, new BakedModelCache.BakedSlotData(variants));
+    }
+
+    /**
+     * Bake door open state: JSON has already been X↔Z swapped, bake with CLOSED door rotation.
+     */
+    private static void bakeHalfDoorOpen(int slotIndex, BlockHalf half, String transformedJson,
+                                          Function<Material, TextureAtlasSprite> spriteGetter) {
+        Map<Direction, BakedModelCache.FacingQuads> variants = new EnumMap<>(Direction.class);
+        for (Direction facing : HORIZONTAL_FACINGS) {
+            // Use closed rotation — the X↔Z swap already accounts for the hinge rotation
+            BlockModelRotation rotation = ShapeCraftModelPlugin.getDoorRotation(facing, false);
+            BakedModelCache.FacingQuads fq = DynamicBlockModel.bakeQuads(transformedJson, slotIndex, rotation, spriteGetter);
+            if (fq != null) {
+                variants.put(facing, fq);
+            }
+        }
+        BakedModelCache.put(slotIndex, half, true, new BakedModelCache.BakedSlotData(variants));
     }
 
     /**

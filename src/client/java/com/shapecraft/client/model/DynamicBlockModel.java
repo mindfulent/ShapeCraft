@@ -1,6 +1,7 @@
 package com.shapecraft.client.model;
 
 import com.google.gson.*;
+import com.shapecraft.block.BlockHalf;
 import com.shapecraft.client.ShapeCraftClient;
 import com.shapecraft.validation.ParentResolver;
 import net.minecraft.client.renderer.block.model.*;
@@ -10,6 +11,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.inventory.InventoryMenu;
 import org.joml.Vector3f;
+import org.joml.Vector4f;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,10 +30,14 @@ public class DynamicBlockModel implements UnbakedModel {
 
     private final int slotIndex;
     private final Direction facing;
+    private final BlockHalf half;
+    private final boolean open;
 
-    public DynamicBlockModel(int slotIndex, Direction facing) {
+    public DynamicBlockModel(int slotIndex, Direction facing, BlockHalf half, boolean open) {
         this.slotIndex = slotIndex;
         this.facing = facing;
+        this.half = half;
+        this.open = open;
     }
 
     @Override
@@ -50,14 +56,124 @@ public class DynamicBlockModel implements UnbakedModel {
         // Use the engine's spriteGetter to bake quads — guaranteed correct after atlas stitching.
         // This handles resource reloads: stale quads were cleared in onInitializeModelLoader().
         ModelCache.ModelData data = ModelCache.get(slotIndex);
-        if (data != null && data.modelJson() != null && !data.modelJson().isEmpty()) {
-            BlockModelRotation rotation = ShapeCraftModelPlugin.getBlockRotation(facing);
-            BakedModelCache.FacingQuads fq = bakeQuads(data.modelJson(), slotIndex, rotation, spriteGetter);
-            if (fq != null) {
-                BakedModelCache.mergeFacing(slotIndex, facing, fq);
+        if (data != null) {
+            // Select model JSON based on half and open state.
+            // For doors: closed model JSON used for both states — open applies X↔Z swap.
+            // For non-doors: use open variant JSON if available, fall back to closed.
+            String json;
+            boolean isDoor = data.isDoor();
+            if (open && !isDoor) {
+                // Non-door open state: use open variant, falling back to closed
+                json = (half == BlockHalf.UPPER
+                        && data.upperModelJsonOpen() != null && !data.upperModelJsonOpen().isEmpty())
+                        ? data.upperModelJsonOpen()
+                        : (data.modelJsonOpen() != null && !data.modelJsonOpen().isEmpty())
+                            ? data.modelJsonOpen()
+                            : null;
+                // Fall back to closed model if no open variant
+                if (json == null || json.isEmpty()) {
+                    json = (half == BlockHalf.UPPER && data.upperModelJson() != null && !data.upperModelJson().isEmpty())
+                            ? data.upperModelJson()
+                            : data.modelJson();
+                }
+            } else {
+                // Closed state, OR door open state (reuse closed model)
+                json = (half == BlockHalf.UPPER && data.upperModelJson() != null && !data.upperModelJson().isEmpty())
+                        ? data.upperModelJson()
+                        : data.modelJson();
+            }
+            if (json != null && !json.isEmpty()) {
+                // For door open state: apply X↔Z coordinate swap to preserve hinge corner,
+                // then bake with the CLOSED rotation (swap already handles the hinge rotation).
+                if (isDoor && open) {
+                    json = transformDoorOpen(json);
+                }
+                BlockModelRotation rotation;
+                if (isDoor) {
+                    // Open state uses closed rotation because X↔Z swap handles the hinge rotation
+                    rotation = ShapeCraftModelPlugin.getDoorRotation(facing, false);
+                } else {
+                    rotation = ShapeCraftModelPlugin.getBlockRotation(facing);
+                }
+                BakedModelCache.FacingQuads fq = bakeQuads(json, slotIndex, rotation, spriteGetter);
+                if (fq != null) {
+                    BakedModelCache.mergeFacing(slotIndex, half, open, facing, fq);
+                }
             }
         }
-        return new DynamicBakedModel(slotIndex, facing);
+        return new DynamicBakedModel(slotIndex, facing, half, open);
+    }
+
+    /**
+     * Transform door model JSON for open state by swapping X↔Z coordinates and remapping faces.
+     * This keeps the hinge corner at (0,*,0) fixed while rotating the panel 90° around it.
+     * Works correctly for multi-element doors (iron bars, window panes, decorative panels)
+     * because it transforms each element's coordinates individually.
+     */
+    public static String transformDoorOpen(String modelJson) {
+        try {
+            JsonObject model = JsonParser.parseString(modelJson).getAsJsonObject();
+            if (!model.has("elements")) return modelJson;
+
+            JsonArray elements = model.getAsJsonArray("elements");
+            JsonArray newElements = new JsonArray();
+
+            for (JsonElement elemJson : elements) {
+                JsonObject elem = elemJson.getAsJsonObject().deepCopy();
+
+                // Swap X↔Z in from/to
+                JsonArray from = elem.getAsJsonArray("from");
+                JsonArray to = elem.getAsJsonArray("to");
+                float fromX = from.get(0).getAsFloat(), fromZ = from.get(2).getAsFloat();
+                float toX = to.get(0).getAsFloat(), toZ = to.get(2).getAsFloat();
+                from.set(0, new JsonPrimitive(fromZ));
+                from.set(2, new JsonPrimitive(fromX));
+                to.set(0, new JsonPrimitive(toZ));
+                to.set(2, new JsonPrimitive(toX));
+
+                // Swap element rotation axis if present
+                if (elem.has("rotation")) {
+                    JsonObject rot = elem.getAsJsonObject("rotation");
+                    if (rot.has("axis")) {
+                        String axis = rot.get("axis").getAsString();
+                        if ("x".equals(axis)) rot.addProperty("axis", "z");
+                        else if ("z".equals(axis)) rot.addProperty("axis", "x");
+                    }
+                    if (rot.has("origin")) {
+                        JsonArray origin = rot.getAsJsonArray("origin");
+                        float ox = origin.get(0).getAsFloat(), oz = origin.get(2).getAsFloat();
+                        origin.set(0, new JsonPrimitive(oz));
+                        origin.set(2, new JsonPrimitive(ox));
+                    }
+                }
+
+                // Remap face keys: north↔west, south↔east
+                if (elem.has("faces")) {
+                    JsonObject oldFaces = elem.getAsJsonObject("faces");
+                    JsonObject newFaces = new JsonObject();
+                    for (var entry : oldFaces.entrySet()) {
+                        String key = entry.getKey();
+                        String newKey = switch (key) {
+                            case "north" -> "west";
+                            case "west" -> "north";
+                            case "south" -> "east";
+                            case "east" -> "south";
+                            default -> key; // up, down unchanged
+                        };
+                        newFaces.add(newKey, entry.getValue());
+                    }
+                    elem.add("faces", newFaces);
+                }
+
+                newElements.add(elem);
+            }
+
+            model.add("elements", newElements);
+            return model.toString();
+        } catch (Exception e) {
+            LOGGER.warn("[Model] Failed to transform door open state: {}", e.getMessage());
+            return modelJson;
+        }
     }
 
     /**
@@ -232,9 +348,13 @@ public class DynamicBlockModel implements UnbakedModel {
                             }
 
                             // Place in correct list based on cullface
+                            // Rotate cullface to match geometry rotation — FaceBakery rotates
+                            // vertex positions but cullForDirection() returns the pre-rotation
+                            // direction from JSON, causing quads to land in wrong buckets
                             Direction cullface = face.cullForDirection();
                             if (cullface != null) {
-                                faceQuads.get(cullface).add(quad);
+                                Direction rotatedCullface = rotateCullface(cullface, rotation);
+                                faceQuads.get(rotatedCullface).add(quad);
                             } else {
                                 unculledQuads.add(quad);
                             }
@@ -323,6 +443,18 @@ public class DynamicBlockModel implements UnbakedModel {
         return new float[]{0, 0, w, h};
     }
 
+    /**
+     * Rotate a cullface direction by the same transformation FaceBakery applies to vertices.
+     * Without this, rotated quads land in the wrong face bucket and the renderer can't find them.
+     */
+    private static Direction rotateCullface(Direction original, BlockModelRotation rotation) {
+        if (rotation == BlockModelRotation.X0_Y0) return original;
+        Vector4f vec = new Vector4f(
+                original.getStepX(), original.getStepY(), original.getStepZ(), 0);
+        rotation.getRotation().getMatrix().transform(vec);
+        return Direction.getNearest(vec.x(), vec.y(), vec.z());
+    }
+
     private static BlockElementRotation parseElementRotation(JsonObject json) {
         Vector3f origin = json.has("origin")
                 ? parseVector3f(json.getAsJsonArray("origin"))
@@ -332,4 +464,5 @@ public class DynamicBlockModel implements UnbakedModel {
         boolean rescale = json.has("rescale") && json.get("rescale").getAsBoolean();
         return new BlockElementRotation(origin, axis, angle, rescale);
     }
+
 }

@@ -10,6 +10,10 @@ public record GenerationCompleteS2C(
         int slotIndex,
         String displayName,
         String modelJson,
+        String upperModelJson,
+        String modelJsonOpen,
+        String upperModelJsonOpen,
+        String blockType,
         String textureTints
 ) implements CustomPacketPayload {
 
@@ -23,12 +27,20 @@ public record GenerationCompleteS2C(
         buf.writeInt(payload.slotIndex);
         buf.writeUtf(payload.displayName);
         buf.writeUtf(payload.modelJson);
+        buf.writeUtf(payload.upperModelJson != null ? payload.upperModelJson : "");
+        buf.writeUtf(payload.modelJsonOpen != null ? payload.modelJsonOpen : "");
+        buf.writeUtf(payload.upperModelJsonOpen != null ? payload.upperModelJsonOpen : "");
+        buf.writeUtf(payload.blockType != null ? payload.blockType : "");
         buf.writeUtf(payload.textureTints != null ? payload.textureTints : "");
     }
 
     private static GenerationCompleteS2C read(RegistryFriendlyByteBuf buf) {
         return new GenerationCompleteS2C(
                 buf.readInt(),
+                buf.readUtf(),
+                buf.readUtf(),
+                buf.readUtf(),
+                buf.readUtf(),
                 buf.readUtf(),
                 buf.readUtf(),
                 buf.readUtf()

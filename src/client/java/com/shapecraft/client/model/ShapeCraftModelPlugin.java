@@ -2,6 +2,8 @@ package com.shapecraft.client.model;
 
 import com.shapecraft.ShapeCraft;
 import com.shapecraft.ShapeCraftConstants;
+import com.shapecraft.block.BlockHalf;
+import com.shapecraft.block.PoolBlock;
 import com.shapecraft.client.ShapeCraftClient;
 import net.fabricmc.fabric.api.client.model.loading.v1.ModelLoadingPlugin;
 import net.minecraft.client.resources.model.BlockModelRotation;
@@ -29,25 +31,18 @@ public class ShapeCraftModelPlugin implements ModelLoadingPlugin {
             pluginContext.registerBlockStateResolver(ShapeCraft.POOL_BLOCKS[slotIndex], context -> {
                 for (BlockState state : context.block().getStateDefinition().getPossibleStates()) {
                     Direction facing = state.getValue(HorizontalDirectionalBlock.FACING);
+                    BlockHalf half = state.getValue(PoolBlock.HALF);
+                    boolean open = state.getValue(PoolBlock.OPEN);
                     // DynamicBlockModel.bake() writes to BakedModelCache using engine's spriteGetter.
-                    context.setModel(state, new DynamicBlockModel(slotIndex, facing));
+                    context.setModel(state, new DynamicBlockModel(slotIndex, facing, half, open));
                 }
             });
         }
     }
 
-    private static float getYRotation(Direction facing) {
-        return switch (facing) {
-            case NORTH -> 0;
-            case EAST -> 270;
-            case SOUTH -> 180;
-            case WEST -> 90;
-            default -> 0;
-        };
-    }
-
     /**
      * Returns the BlockModelRotation for a given FACING direction.
+     * Standard mapping: NORTH=Y0 base.
      */
     public static BlockModelRotation getBlockRotation(Direction facing) {
         return switch (facing) {
@@ -57,5 +52,31 @@ public class ShapeCraftModelPlugin implements ModelLoadingPlugin {
             case WEST -> BlockModelRotation.X0_Y270;
             default -> BlockModelRotation.X0_Y0;
         };
+    }
+
+    /**
+     * Returns the BlockModelRotation for doors, compensating for PoolBlock's .getOpposite()
+     * FACING convention. PoolBlock stores FACING = opposite of vanilla DoorBlock's convention,
+     * so we apply vanilla's rotation for facing.getOpposite().
+     *
+     * Closed = standard block rotation + 90° (compensates for the opposite FACING).
+     * Open = standard block rotation + 180° (the X↔Z swap handles the hinge rotation,
+     * so only the 180° offset is needed, not the full 270° that +90° closed + 90° open would give).
+     *
+     * Closed mapping (our FACING → rotation):
+     *   WEST→Y0, NORTH→Y90, EAST→Y180, SOUTH→Y270
+     * Open mapping (our FACING → rotation):
+     *   WEST→Y90, NORTH→Y180, EAST→Y270, SOUTH→Y0
+     */
+    public static BlockModelRotation getDoorRotation(Direction facing, boolean open) {
+        int baseY = switch (facing) {
+            case NORTH -> 0;
+            case EAST -> 90;
+            case SOUTH -> 180;
+            case WEST -> 270;
+            default -> 0;
+        };
+        int offset = open ? 180 : 90;
+        return BlockModelRotation.by(0, (baseY + offset) % 360);
     }
 }

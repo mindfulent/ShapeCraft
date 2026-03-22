@@ -1,5 +1,6 @@
 package com.shapecraft.client.model;
 
+import com.shapecraft.block.BlockHalf;
 import net.minecraft.client.renderer.block.model.BakedQuad;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.core.Direction;
@@ -12,7 +13,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Shared mutable store of baked quad data, keyed by slot index.
+ * Shared mutable store of baked quad data, keyed by (slotIndex, half).
  * DynamicBakedModel delegates to this cache for its quads.
  * Thread-safe: ConcurrentHashMap for atomic slot-level updates.
  *
@@ -24,7 +25,9 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class BakedModelCache {
 
-    private static final ConcurrentHashMap<Integer, BakedSlotData> cache = new ConcurrentHashMap<>();
+    public record CacheKey(int slotIndex, BlockHalf half, boolean open) {}
+
+    private static final ConcurrentHashMap<CacheKey, BakedSlotData> cache = new ConcurrentHashMap<>();
 
     public record FacingQuads(
             Map<Direction, List<BakedQuad>> faceQuads,
@@ -35,13 +38,17 @@ public class BakedModelCache {
 
     public record BakedSlotData(Map<Direction, FacingQuads> facingVariants) {}
 
-    public static void put(int slotIndex, BakedSlotData data) {
-        cache.put(slotIndex, data);
+    public static void put(int slotIndex, BlockHalf half, BakedSlotData data) {
+        put(slotIndex, half, false, data);
+    }
+
+    public static void put(int slotIndex, BlockHalf half, boolean open, BakedSlotData data) {
+        cache.put(new CacheKey(slotIndex, half, open), data);
     }
 
     @Nullable
-    public static BakedSlotData get(int slotIndex) {
-        return cache.get(slotIndex);
+    public static BakedSlotData get(int slotIndex, BlockHalf half) {
+        return cache.get(new CacheKey(slotIndex, half, false));
     }
 
     public static void clear() {
@@ -49,12 +56,13 @@ public class BakedModelCache {
     }
 
     /**
-     * Atomically merge a single facing variant into the cache for a slot.
-     * Used by DynamicBlockModel.bake() which is called per block state (per facing).
+     * Atomically merge a single facing variant into the cache for a slot+half.
+     * Used by DynamicBlockModel.bake() which is called per block state (per facing × half).
      * Uses compute() for atomic read-modify-write.
      */
-    public static void mergeFacing(int slotIndex, Direction facing, FacingQuads fq) {
-        cache.compute(slotIndex, (key, existing) -> {
+    public static void mergeFacing(int slotIndex, BlockHalf half, boolean open, Direction facing, FacingQuads fq) {
+        CacheKey key = new CacheKey(slotIndex, half, open);
+        cache.compute(key, (k, existing) -> {
             Map<Direction, FacingQuads> variants;
             if (existing != null) {
                 variants = new EnumMap<>(existing.facingVariants());
@@ -67,12 +75,16 @@ public class BakedModelCache {
     }
 
     /**
-     * Look up quads for a specific slot and facing direction.
+     * Look up quads for a specific slot, half, and facing direction.
      * Pure lookup — returns null if no data exists (slot not generated).
      */
     @Nullable
-    public static FacingQuads getQuads(int slotIndex, Direction facing) {
-        BakedSlotData slotData = cache.get(slotIndex);
+    public static FacingQuads getQuads(int slotIndex, BlockHalf half, boolean open, Direction facing) {
+        BakedSlotData slotData = cache.get(new CacheKey(slotIndex, half, open));
+        if (slotData == null && open) {
+            // Fallback to closed model if no open variant exists
+            slotData = cache.get(new CacheKey(slotIndex, half, false));
+        }
         if (slotData == null) return null;
         return slotData.facingVariants().get(facing);
     }

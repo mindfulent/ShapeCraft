@@ -1,5 +1,6 @@
 package com.shapecraft.client.model;
 
+import com.shapecraft.block.BlockHalf;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.block.model.BakedQuad;
 import net.minecraft.client.renderer.block.model.ItemOverrides;
@@ -26,15 +27,19 @@ public class DynamicBakedModel implements BakedModel {
 
     private final int slotIndex;
     private final Direction facing;
+    private final BlockHalf half;
+    private final boolean open;
 
-    public DynamicBakedModel(int slotIndex, Direction facing) {
+    public DynamicBakedModel(int slotIndex, Direction facing, BlockHalf half, boolean open) {
         this.slotIndex = slotIndex;
         this.facing = facing;
+        this.half = half;
+        this.open = open;
     }
 
     @Override
     public List<BakedQuad> getQuads(@Nullable BlockState state, @Nullable Direction direction, RandomSource random) {
-        BakedModelCache.FacingQuads fq = BakedModelCache.getQuads(slotIndex, facing);
+        BakedModelCache.FacingQuads fq = BakedModelCache.getQuads(slotIndex, half, open, facing);
         if (fq == null) {
             return Collections.emptyList();
         }
@@ -46,7 +51,7 @@ public class DynamicBakedModel implements BakedModel {
 
     @Override
     public boolean useAmbientOcclusion() {
-        BakedModelCache.FacingQuads fq = BakedModelCache.getQuads(slotIndex, facing);
+        BakedModelCache.FacingQuads fq = BakedModelCache.getQuads(slotIndex, half, open, facing);
         return fq != null && fq.ambientOcclusion();
     }
 
@@ -67,7 +72,7 @@ public class DynamicBakedModel implements BakedModel {
 
     @Override
     public TextureAtlasSprite getParticleIcon() {
-        BakedModelCache.FacingQuads fq = BakedModelCache.getQuads(slotIndex, facing);
+        BakedModelCache.FacingQuads fq = BakedModelCache.getQuads(slotIndex, half, open, facing);
         if (fq != null && fq.particleSprite() != null) {
             return fq.particleSprite();
         }

@@ -25,6 +25,10 @@ public record BlockSyncS2C(
             buf.writeInt(entry.slotIndex());
             buf.writeUtf(entry.displayName());
             buf.writeUtf(entry.modelJson());
+            buf.writeUtf(entry.upperModelJson() != null ? entry.upperModelJson() : "");
+            buf.writeUtf(entry.modelJsonOpen() != null ? entry.modelJsonOpen() : "");
+            buf.writeUtf(entry.upperModelJsonOpen() != null ? entry.upperModelJsonOpen() : "");
+            buf.writeUtf(entry.blockType() != null ? entry.blockType() : "");
             buf.writeUtf(entry.textureTints() != null ? entry.textureTints() : "");
         }
     }
@@ -35,6 +39,10 @@ public record BlockSyncS2C(
         for (int i = 0; i < count; i++) {
             entries.add(new BlockSyncEntry(
                     buf.readInt(),
+                    buf.readUtf(),
+                    buf.readUtf(),
+                    buf.readUtf(),
+                    buf.readUtf(),
                     buf.readUtf(),
                     buf.readUtf(),
                     buf.readUtf()
@@ -48,5 +56,7 @@ public record BlockSyncS2C(
         return TYPE;
     }
 
-    public record BlockSyncEntry(int slotIndex, String displayName, String modelJson, String textureTints) {}
+    public record BlockSyncEntry(int slotIndex, String displayName, String modelJson, String upperModelJson,
+                                  String modelJsonOpen, String upperModelJsonOpen, String blockType,
+                                  String textureTints) {}
 }

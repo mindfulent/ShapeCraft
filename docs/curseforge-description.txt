@@ -1,0 +1,47 @@
+# ShapeCraft generates custom Minecraft blocks from natural language — describe what you want, and it appears as a fully functional, placeable block in seconds.
+
+### Type `/shapecraft a weathered copper lantern with chain attachment` and get a validated block model with accurate textures, collision, directional placement, and multiplayer sync — no restart, no resource packs, no 3D modeling skills needed.
+
+***
+
+### Features
+
+*   Natural Language Generation — Describe any block in plain English and ShapeCraft generates a valid block model using Claude AI backed by a retrieval index of ~2,100 vanilla Minecraft block definitions
+*   Instant Injection — Generated blocks appear in your inventory immediately with no resource reload or loading screen, via runtime model hot-swap
+*   Accurate Collision — Custom VoxelShapes computed from the generated model geometry, so players collide with the actual shape, not a full cube
+*   Directional Placement — Blocks rotate based on the direction you're facing when you place them (4-way FACING property)
+*   Two-Block-Tall Blocks — Doors, arches, tall lamps, pillars, and other objects that naturally span two blocks generate as proper two-block structures with linked upper and lower halves
+*   Interactive Doors — Door-type blocks open and close on right-click with sound effects, synced partner halves, and distinct open/closed geometry
+*   Texture Tinting — AI selects from 140+ vanilla textures and can apply color tints for custom appearances (e.g., weathered copper, painted wood) without custom texture files
+*   Multiplayer Synced — All generated blocks sync to every player on the server, including players who join later
+*   11-Rule Model Validation — Every generated model is validated for structural integrity before injection (JSON syntax, coordinate ranges, element count, texture references, rotation angles, and more)
+*   Content Filter — Built-in blocklist filter screens descriptions before they reach the AI
+*   64-Block Pool — Up to 64 custom blocks can exist per world simultaneously
+*   Persistent — Generated blocks survive server restarts and world reloads via NBT persistence
+*   Zero setup for players — Server owner installs the mod, gets an auto-provisioned free trial with no signup required
+
+### How It Works
+
+Type `/shapecraft` followed by a description of the block you want (up to 200 characters). Your description is embedded and matched against ~2,100 vanilla block models via RAG retrieval. Claude Sonnet 4.6 generates a valid block model JSON using the best matches as context, selects appropriate vanilla textures, and optionally applies color tints. The model is validated against 11 structural rules, injected via Fabric's Model Loading API, and the block appears in your inventory — all within a few seconds.
+
+Status updates appear in your action bar throughout: *Queued → Generating → Validating → Complete*.
+
+### Commands
+
+| Command | Permission | Description |
+|---------|-----------|-------------|
+| `/shapecraft <description>` | All players | Generate a block from a natural language description |
+| `/shapecraft info` | All players | Show pool status, license state, and remaining daily generations |
+| `/shapecraft status` | Op (level 4) | Extended license and usage details |
+| `/shapecraft activate <code>` | Op (level 4) | Activate a paid license |
+
+### Requirements
+
+*   Minecraft 1.21.1 (Fabric)
+*   Multiplayer only — requires the mod installed on both client and server
+*   Fabric API
+*   Java 21+
+
+### Licensing
+
+ShapeCraft works out of the box with a free trial (50 generations) — no registration needed. After the trial, server owners can subscribe for unlimited generation. One license per server. Rate limit: 10 generations per player per day.

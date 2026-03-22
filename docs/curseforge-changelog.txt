@@ -1,0 +1,20 @@
+v0.4.13 — Fix door rotation to use vanilla's EAST=Y0 mapping for correct front-face alignment and open swing direction
+v0.4.12 — Client-side door open rotation replaces unreliable Claude-generated open variants; prompt now enforces flat panel geometry
+v0.4.10 — Interactive door mechanics: right-click open/close with sound effects, synced partner halves, and OPEN block state property
+v0.4.9 — Fix cullface rotation for directional blocks; add backend tall block support (upper_model in Claude prompt)
+v0.4.8 — Two-block-tall generated blocks: doors, lamps, pillars, and arches now span two blocks with linked upper/lower halves
+v0.4.7 — Fix texture orientation via origin-based auto-UV mapping (consistent appearance regardless of element position)
+v0.4.6 — Fix invisible textures via CUTOUT render layer registration and parent texture inheritance merge
+v0.4.5 — Fix block outline shape not syncing to clients via vanilla block entity update packets
+v0.4.4 — Fix block selection outline showing full cube instead of model-accurate bounds on first placement
+v0.4.3 — Fix ModelValidator rejecting comment keys in elements; add diagnostic logging
+v0.4.2 — Fix invisible blocks from parent-only models via pre-computed ParentResolver with 50 vanilla parents
+v0.4.1 — Fix texture corruption after generation via self-validating baked model cache with reload generation tracking
+v0.4.0 — Runtime model hot-swap eliminates resource reload loading screen on block generation
+v0.3.0 — Backend integration: RAG retrieval, Claude generation, content filter, texture tinting, multiplayer hardening, license system
+v0.2.0 — First functional mod: 64-block pool, networking, backend client, model injection, persistence, license system
+v0.1.4 — Technical Design Document
+v0.1.3 — Texture Asset Policy in PRD
+v0.1.2 — Design brief formatting fix
+v0.1.1 — Product Requirements Document
+v0.1.0 — Initial project setup with design brief and vanilla asset corpus
