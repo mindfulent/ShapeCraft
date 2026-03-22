@@ -83,15 +83,19 @@ public class DynamicBlockModel implements UnbakedModel {
                         : data.modelJson();
             }
             if (json != null && !json.isEmpty()) {
-                // For door open state: apply X↔Z coordinate swap to preserve hinge corner,
-                // then bake with the CLOSED rotation (swap already handles the hinge rotation).
-                if (isDoor && open) {
-                    json = transformDoorOpen(json);
+                // For doors: normalize centered panels to block edge, then X↔Z swap for open state
+                boolean thinAlongZ = true;
+                if (isDoor) {
+                    NormalizedDoor norm = normalizeDoorPanel(json);
+                    json = norm.json();
+                    thinAlongZ = norm.thinAlongZ();
+                    if (open) {
+                        json = transformDoorOpen(json);
+                    }
                 }
                 BlockModelRotation rotation;
                 if (isDoor) {
-                    // Open state uses closed rotation because X↔Z swap handles the hinge rotation
-                    rotation = ShapeCraftModelPlugin.getDoorRotation(facing, false);
+                    rotation = ShapeCraftModelPlugin.getDoorRotation(facing, open, thinAlongZ);
                 } else {
                     rotation = ShapeCraftModelPlugin.getBlockRotation(facing);
                 }
@@ -102,6 +106,87 @@ public class DynamicBlockModel implements UnbakedModel {
             }
         }
         return new DynamicBakedModel(slotIndex, facing, half, open);
+    }
+
+    /**
+     * Result of normalizing a door panel: the translated JSON and which axis is thin.
+     */
+    public record NormalizedDoor(String json, boolean thinAlongZ) {}
+
+    /**
+     * Normalize a door model so the thin axis is flush with the far edge of the block (16-side).
+     * Claude often generates centered panels (e.g., Z=7..9); this snaps them to the edge
+     * so that BlockModelRotation can place them on the correct block face for each FACING.
+     */
+    public static NormalizedDoor normalizeDoorPanel(String modelJson) {
+        try {
+            JsonObject model = JsonParser.parseString(modelJson).getAsJsonObject();
+            if (!model.has("elements")) return new NormalizedDoor(modelJson, true);
+
+            JsonArray elements = model.getAsJsonArray("elements");
+            if (elements.isEmpty()) return new NormalizedDoor(modelJson, true);
+
+            // Find bounding box across all elements (X and Z only)
+            float minX = Float.MAX_VALUE, maxX = -Float.MAX_VALUE;
+            float minZ = Float.MAX_VALUE, maxZ = -Float.MAX_VALUE;
+            for (JsonElement elemJson : elements) {
+                JsonObject elem = elemJson.getAsJsonObject();
+                JsonArray from = elem.getAsJsonArray("from");
+                JsonArray to = elem.getAsJsonArray("to");
+                minX = Math.min(minX, from.get(0).getAsFloat());
+                maxX = Math.max(maxX, to.get(0).getAsFloat());
+                minZ = Math.min(minZ, from.get(2).getAsFloat());
+                maxZ = Math.max(maxZ, to.get(2).getAsFloat());
+            }
+
+            float extentX = maxX - minX;
+            float extentZ = maxZ - minZ;
+
+            // Determine thin axis (ignore Y — doors are always full height)
+            boolean thinZ = extentZ <= extentX;
+            // Default to thin-Z if equal (square panel)
+
+            float offset;
+            int axis; // 0=X, 2=Z
+            if (thinZ) {
+                offset = 16.0f - maxZ;
+                axis = 2;
+            } else {
+                offset = 16.0f - maxX;
+                axis = 0;
+            }
+
+            if (Math.abs(offset) < 0.01f) return new NormalizedDoor(modelJson, thinZ);
+
+            // Apply translation to all elements
+            JsonArray newElements = new JsonArray();
+            for (JsonElement elemJson : elements) {
+                JsonObject elem = elemJson.getAsJsonObject().deepCopy();
+                JsonArray from = elem.getAsJsonArray("from");
+                JsonArray to = elem.getAsJsonArray("to");
+                from.set(axis, new JsonPrimitive(from.get(axis).getAsFloat() + offset));
+                to.set(axis, new JsonPrimitive(to.get(axis).getAsFloat() + offset));
+
+                if (elem.has("rotation")) {
+                    JsonObject rot = elem.getAsJsonObject("rotation");
+                    if (rot.has("origin")) {
+                        JsonArray origin = rot.getAsJsonArray("origin");
+                        origin.set(axis, new JsonPrimitive(origin.get(axis).getAsFloat() + offset));
+                    }
+                }
+
+                newElements.add(elem);
+            }
+            model.add("elements", newElements);
+
+            LOGGER.debug("[Model] Normalized door panel: offset={} along {} axis (thinZ={})",
+                    String.format("%.1f", offset), thinZ ? "Z" : "X", thinZ);
+
+            return new NormalizedDoor(model.toString(), thinZ);
+        } catch (Exception e) {
+            LOGGER.warn("[Model] Failed to normalize door panel: {}", e.getMessage());
+            return new NormalizedDoor(modelJson, true);
+        }
     }
 
     /**

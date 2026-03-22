@@ -1,5 +1,55 @@
 # Changelog
 
+## v0.4.16 — 2026-03-22
+
+Fix door texture/hitbox alignment for all facing directions and open/closed states.
+
+### Root Cause
+Claude generates door panels at arbitrary positions (often centered, e.g. `Z=7..9`) and with varying thin axes (some thin along Z, others along X). The previous hardcoded rotation couldn't handle this variation — panels ended up floating in the middle of the block or on the wrong edge.
+
+### Automatic Door Panel Normalization
+- `DynamicBlockModel.normalizeDoorPanel()` detects the model's thin axis (X or Z) and translates all elements so the panel is flush with the far edge (16-side) of that axis
+- Returns a `NormalizedDoor` record carrying both the translated JSON and which axis is thin
+- Applied before baking (closed) and before X↔Z swap (open) in both the runtime hot-swap and resource reload paths
+
+### Axis-Aware Rotation Lookup
+- `ShapeCraftModelPlugin.getDoorRotation(facing, open, thinAlongZ)` uses direct lookup tables instead of formula-based offsets
+- 4 tables cover every combination of (thin-Z vs thin-X) × (closed vs open-after-swap)
+- Correctly uses Minecraft's clockwise-from-above Y-rotation convention: Y90 = `(x,z)→(16-z,x)`, Y270 = `(x,z)→(z,16-x)`
+
+### Debug Command (`/shapecraft debug`)
+- `/shapecraft debug` — shows hitbox offsets + info about the block you're looking at (FACING, OPEN, slot, blockType)
+- `/shapecraft debug hclosed <0|90|180|270>` — hitbox closed offset (immediate)
+- `/shapecraft debug hopen <0|90|180|270>` — hitbox open offset (immediate)
+- Texture debug commands removed (rotation is now automatic)
+- All debug commands require op level 4
+
+### Other Changes
+- Reverted `getShape()` lazy backfill from v0.4.15 (no longer needed)
+- `DoorDebugState` simplified to hitbox offsets only + `rotateFacing()` helper
+- `DoorDebugSyncS2C` packet registered but no-op (kept for protocol compatibility)
+
+## v0.4.15 — 2026-03-21
+
+Increase generation request timeout from 30s to 60s. The backend may retry the Claude API call on malformed JSON, which can exceed 30s total.
+
+Fix door interaction regression from v0.4.14 — pre-existing doors (placed before `BlockType` NBT field existed) couldn't be opened because `useWithoutItem()` checked the block entity which had empty `blockType`. Reverted `useWithoutItem()` to use `BlockPoolManager` (always available server-side).
+
+Fix door outline/collision misalignment — pre-existing door block entities lacked `BlockType` in NBT, so `getShape()` couldn't detect them as doors on the client (where `BlockPoolManager` is empty). Added lazy backfill: on the server, `getShape()` copies `blockType` from `BlockPoolManager` into the block entity and triggers `sendBlockUpdated`, syncing to clients via the existing block entity packet.
+
+## v0.4.14 — 2026-03-21
+
+Fix door hit area not following open/close state on the client — clicking an opened door at its visual position now registers correctly.
+
+### Root Cause
+`PoolBlock.getShape()` checked `BlockPoolManager.getSlot(slotIndex).isDoor()` for door-specific collision shapes, but `BlockPoolManager` is server-side only. On the client, the lookup returned null, falling through to the static cached shape computed from the closed model JSON.
+
+### Block Entity Door Awareness
+- `PoolBlockEntity` gains `blockType` field with `isDoor()` convenience method, persisted in NBT (`"BlockType"`) and synced to clients via existing `getUpdateTag()`/`getUpdatePacket()`
+- `PoolBlock.getShape()` now checks `poolBe.isDoor()` instead of `BlockPoolManager` — works on both client and server
+- `PoolBlock.useWithoutItem()` also uses block entity check instead of `BlockPoolManager`
+- `PoolBlock.setPlacedBy()` copies `blockType` from pool data to block entity for both lower and upper halves
+
 ## v0.4.13 — 2026-03-21
 
 Fix door rotation: correct FACING convention mismatch, restore X↔Z hinge transform for multi-element doors, add closed door collision shapes.

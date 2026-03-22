@@ -55,28 +55,73 @@ public class ShapeCraftModelPlugin implements ModelLoadingPlugin {
     }
 
     /**
-     * Returns the BlockModelRotation for doors, compensating for PoolBlock's .getOpposite()
-     * FACING convention. PoolBlock stores FACING = opposite of vanilla DoorBlock's convention,
-     * so we apply vanilla's rotation for facing.getOpposite().
+     * Returns the BlockModelRotation for a normalized door model.
      *
-     * Closed = standard block rotation + 90° (compensates for the opposite FACING).
-     * Open = standard block rotation + 180° (the X↔Z swap handles the hinge rotation,
-     * so only the 180° offset is needed, not the full 270° that +90° closed + 90° open would give).
+     * The rotation depends on the model's thin axis (detected by normalizeDoorPanel)
+     * and whether the door is open (after X↔Z swap, thin axis flips).
      *
-     * Closed mapping (our FACING → rotation):
-     *   WEST→Y0, NORTH→Y90, EAST→Y180, SOUTH→Y270
-     * Open mapping (our FACING → rotation):
-     *   WEST→Y90, NORTH→Y180, EAST→Y270, SOUTH→Y0
+     * For a normalized panel flush with the 16-side of its thin axis:
+     *
+     * Closed thin-Z (panel at Z≈16):
+     *   NORTH→Y180, SOUTH→Y0, EAST→Y90, WEST→Y270
+     *
+     * Closed thin-X (panel at X≈16):
+     *   NORTH→Y90, SOUTH→Y270, EAST→Y0, WEST→Y180
+     *
+     * Open thin-Z→X (panel was thin-Z, X↔Z swap made it thin-X at X≈16):
+     *   NORTH→Y0, SOUTH→Y180, EAST→Y270, WEST→Y90
+     *
+     * Open thin-X→Z (panel was thin-X, X↔Z swap made it thin-Z at Z≈16):
+     *   NORTH→Y90, SOUTH→Y270, EAST→Y0, WEST→Y180
      */
-    public static BlockModelRotation getDoorRotation(Direction facing, boolean open) {
-        int baseY = switch (facing) {
-            case NORTH -> 0;
-            case EAST -> 90;
-            case SOUTH -> 180;
-            case WEST -> 270;
-            default -> 0;
-        };
-        int offset = open ? 180 : 90;
-        return BlockModelRotation.by(0, (baseY + offset) % 360);
+    /**
+     * Minecraft Y-rotation convention (clockwise from above):
+     *   Y90:  (x,z) → (16-z, x)
+     *   Y180: (x,z) → (16-x, 16-z)
+     *   Y270: (x,z) → (z, 16-x)
+     */
+    public static BlockModelRotation getDoorRotation(Direction facing, boolean open, boolean originalThinZ) {
+        if (!open) {
+            if (originalThinZ) {
+                // Panel normalized to Z≈16. Map to correct block edge:
+                return switch (facing) {
+                    case NORTH -> BlockModelRotation.X0_Y180;  // Z≈16 → Z≈0
+                    case SOUTH -> BlockModelRotation.X0_Y0;    // Z≈16 stays
+                    case EAST  -> BlockModelRotation.X0_Y270;  // Z≈16 → X≈16
+                    case WEST  -> BlockModelRotation.X0_Y90;   // Z≈16 → X≈0
+                    default -> BlockModelRotation.X0_Y0;
+                };
+            } else {
+                // Panel normalized to X≈16. Map to correct block edge:
+                return switch (facing) {
+                    case NORTH -> BlockModelRotation.X0_Y270;  // X≈16 → Z≈0
+                    case SOUTH -> BlockModelRotation.X0_Y90;   // X≈16 → Z≈16
+                    case EAST  -> BlockModelRotation.X0_Y0;    // X≈16 stays
+                    case WEST  -> BlockModelRotation.X0_Y180;  // X≈16 → X≈0
+                    default -> BlockModelRotation.X0_Y0;
+                };
+            }
+        } else {
+            // After X↔Z swap, thin axis is flipped
+            if (originalThinZ) {
+                // Was thin-Z, now thin-X at X≈16 after swap:
+                return switch (facing) {
+                    case NORTH -> BlockModelRotation.X0_Y0;    // X≈16 stays (east=open-north)
+                    case SOUTH -> BlockModelRotation.X0_Y180;  // X≈16 → X≈0
+                    case EAST  -> BlockModelRotation.X0_Y90;   // X≈16 → Z≈16
+                    case WEST  -> BlockModelRotation.X0_Y270;  // X≈16 → Z≈0
+                    default -> BlockModelRotation.X0_Y0;
+                };
+            } else {
+                // Was thin-X, now thin-Z at Z≈16 after swap:
+                return switch (facing) {
+                    case NORTH -> BlockModelRotation.X0_Y180;  // Z≈16 → Z≈0
+                    case SOUTH -> BlockModelRotation.X0_Y0;    // Z≈16 stays
+                    case EAST  -> BlockModelRotation.X0_Y270;  // Z≈16 → X≈16
+                    case WEST  -> BlockModelRotation.X0_Y90;   // Z≈16 → X≈0
+                    default -> BlockModelRotation.X0_Y0;
+                };
+            }
+        }
     }
 }

@@ -115,5 +115,11 @@ public class ShapeCraftClientNetworking {
                 });
             }
         });
+
+        // DoorDebugSyncS2C kept registered for protocol compatibility but no longer used
+        // (texture rotation is now computed automatically from model geometry)
+        ClientPlayNetworking.registerGlobalReceiver(DoorDebugSyncS2C.TYPE, (payload, context) -> {
+            ShapeCraftClient.LOGGER.debug("[Debug] Received door debug sync (no-op)");
+        });
     }
 }

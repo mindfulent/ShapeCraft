@@ -107,18 +107,12 @@ public class PoolBlock extends HorizontalDirectionalBlock implements EntityBlock
 
     @Override
     public VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
-        // Door blocks: use hard-coded shapes for both closed and open states
-        if (slotIndex >= 0) {
-            BlockPoolManager pool = ShapeCraft.getInstance().getBlockPoolManager();
-            BlockPoolManager.BlockSlotData data = pool.getSlot(slotIndex);
-            if (data != null && data.isDoor()) {
+        BlockEntity be = level.getBlockEntity(pos);
+        if (be instanceof PoolBlockEntity poolBe) {
+            if (poolBe.isDoor()) {
                 Direction facing = state.getValue(FACING);
                 return state.getValue(OPEN) ? getDoorOpenShape(facing) : getDoorClosedShape(facing);
             }
-        }
-
-        BlockEntity be = level.getBlockEntity(pos);
-        if (be instanceof PoolBlockEntity poolBe) {
             VoxelShape cached = poolBe.getCachedShape();
             if (cached != null) {
                 return cached;
@@ -128,7 +122,8 @@ public class PoolBlock extends HorizontalDirectionalBlock implements EntityBlock
     }
 
     private static VoxelShape getDoorClosedShape(Direction facing) {
-        return switch (facing) {
+        Direction lookup = DoorDebugState.rotateFacing(facing, DoorDebugState.hitboxClosedOffset);
+        return switch (lookup) {
             case WEST -> DOOR_CLOSED_WEST;
             case NORTH -> DOOR_CLOSED_NORTH;
             case EAST -> DOOR_CLOSED_EAST;
@@ -138,7 +133,8 @@ public class PoolBlock extends HorizontalDirectionalBlock implements EntityBlock
     }
 
     private static VoxelShape getDoorOpenShape(Direction facing) {
-        return switch (facing) {
+        Direction lookup = DoorDebugState.rotateFacing(facing, DoorDebugState.hitboxOpenOffset);
+        return switch (lookup) {
             case WEST -> DOOR_OPEN_WEST;
             case NORTH -> DOOR_OPEN_NORTH;
             case EAST -> DOOR_OPEN_EAST;
@@ -152,7 +148,7 @@ public class PoolBlock extends HorizontalDirectionalBlock implements EntityBlock
                                                 Player player, BlockHitResult hitResult) {
         if (level.isClientSide()) return InteractionResult.SUCCESS;
 
-        // Check block type from pool data
+        // Check block type — use BlockPoolManager (always available server-side)
         BlockPoolManager pool = ShapeCraft.getInstance().getBlockPoolManager();
         BlockPoolManager.BlockSlotData data = slotIndex >= 0 ? pool.getSlot(slotIndex) : null;
         if (data == null || !data.isDoor()) return InteractionResult.PASS;
@@ -188,6 +184,7 @@ public class PoolBlock extends HorizontalDirectionalBlock implements EntityBlock
                     poolBe.setSlotIndex(slotIndex);
                     poolBe.setDisplayName(data.displayName());
                     poolBe.setModelJson(data.modelJson());
+                    poolBe.setBlockType(data.blockType());
                     level.sendBlockUpdated(pos, state, state, Block.UPDATE_ALL);
 
                     // Place upper half for tall blocks
@@ -203,6 +200,7 @@ public class PoolBlock extends HorizontalDirectionalBlock implements EntityBlock
                             upperPoolBe.setSlotIndex(slotIndex);
                             upperPoolBe.setDisplayName(data.displayName());
                             upperPoolBe.setModelJson(data.upperModelJson());
+                            upperPoolBe.setBlockType(data.blockType());
                             level.sendBlockUpdated(above, upperState, upperState, Block.UPDATE_ALL);
                         }
                     }

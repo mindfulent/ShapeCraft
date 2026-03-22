@@ -102,14 +102,15 @@ public class RuntimeModelBaker {
         boolean isDoor = data.isDoor();
 
         if (isDoor) {
-            // Doors: apply X↔Z swap on closed JSON, bake with CLOSED rotation.
-            // The swap handles the hinge rotation; closed rotation handles facing.
-            String openLower = DynamicBlockModel.transformDoorOpen(data.modelJson());
-            bakeHalfDoorOpen(slotIndex, BlockHalf.LOWER, openLower, spriteGetter);
+            // Doors: normalize to edge (get thin axis), apply X↔Z swap, bake with axis-aware rotation.
+            DynamicBlockModel.NormalizedDoor lowerNorm = DynamicBlockModel.normalizeDoorPanel(data.modelJson());
+            String openLower = DynamicBlockModel.transformDoorOpen(lowerNorm.json());
+            bakeHalfDoorOpen(slotIndex, BlockHalf.LOWER, openLower, spriteGetter, lowerNorm.thinAlongZ());
 
             if (data.upperModelJson() != null && !data.upperModelJson().isEmpty()) {
-                String openUpper = DynamicBlockModel.transformDoorOpen(data.upperModelJson());
-                bakeHalfDoorOpen(slotIndex, BlockHalf.UPPER, openUpper, spriteGetter);
+                DynamicBlockModel.NormalizedDoor upperNorm = DynamicBlockModel.normalizeDoorPanel(data.upperModelJson());
+                String openUpper = DynamicBlockModel.transformDoorOpen(upperNorm.json());
+                bakeHalfDoorOpen(slotIndex, BlockHalf.UPPER, openUpper, spriteGetter, upperNorm.thinAlongZ());
             }
         } else {
             // Non-doors: bake separate open variant JSON if present
@@ -137,10 +138,17 @@ public class RuntimeModelBaker {
     private static void bakeHalf(int slotIndex, BlockHalf half, String modelJson,
                                   Function<Material, TextureAtlasSprite> spriteGetter,
                                   boolean open, boolean isDoor) {
+        boolean thinAlongZ = true; // default
+        if (isDoor) {
+            DynamicBlockModel.NormalizedDoor norm = DynamicBlockModel.normalizeDoorPanel(modelJson);
+            modelJson = norm.json();
+            thinAlongZ = norm.thinAlongZ();
+        }
+        final boolean finalThinZ = thinAlongZ;
         Map<Direction, BakedModelCache.FacingQuads> variants = new EnumMap<>(Direction.class);
         for (Direction facing : HORIZONTAL_FACINGS) {
             BlockModelRotation rotation = isDoor
-                    ? ShapeCraftModelPlugin.getDoorRotation(facing, false)
+                    ? ShapeCraftModelPlugin.getDoorRotation(facing, false, finalThinZ)
                     : ShapeCraftModelPlugin.getBlockRotation(facing);
             BakedModelCache.FacingQuads fq = DynamicBlockModel.bakeQuads(modelJson, slotIndex, rotation, spriteGetter);
             if (fq != null) {
@@ -151,14 +159,15 @@ public class RuntimeModelBaker {
     }
 
     /**
-     * Bake door open state: JSON has already been X↔Z swapped, bake with CLOSED door rotation.
+     * Bake door open state: JSON has already been normalized + X↔Z swapped.
+     * Uses axis-aware rotation based on the original thin axis.
      */
     private static void bakeHalfDoorOpen(int slotIndex, BlockHalf half, String transformedJson,
-                                          Function<Material, TextureAtlasSprite> spriteGetter) {
+                                          Function<Material, TextureAtlasSprite> spriteGetter,
+                                          boolean originalThinZ) {
         Map<Direction, BakedModelCache.FacingQuads> variants = new EnumMap<>(Direction.class);
         for (Direction facing : HORIZONTAL_FACINGS) {
-            // Use closed rotation — the X↔Z swap already accounts for the hinge rotation
-            BlockModelRotation rotation = ShapeCraftModelPlugin.getDoorRotation(facing, false);
+            BlockModelRotation rotation = ShapeCraftModelPlugin.getDoorRotation(facing, true, originalThinZ);
             BakedModelCache.FacingQuads fq = DynamicBlockModel.bakeQuads(transformedJson, slotIndex, rotation, spriteGetter);
             if (fq != null) {
                 variants.put(facing, fq);

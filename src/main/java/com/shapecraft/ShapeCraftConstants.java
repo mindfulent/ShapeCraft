@@ -26,7 +26,7 @@ public final class ShapeCraftConstants {
     public static final String DISCORD_URL = "https://discord.gg/ggvCkBD9vm";
 
     // Backend
-    public static final int GENERATION_TIMEOUT_SECONDS = 30;
+    public static final int GENERATION_TIMEOUT_SECONDS = 60;
     public static final int GENERATION_THREAD_POOL_SIZE = 2;
 
     private ShapeCraftConstants() {}

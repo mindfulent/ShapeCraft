@@ -24,6 +24,7 @@ public class ShapeCraftNetworking {
         PayloadTypeRegistry.playS2C().register(GenerationCompleteS2C.TYPE, GenerationCompleteS2C.CODEC);
         PayloadTypeRegistry.playS2C().register(GenerationErrorS2C.TYPE, GenerationErrorS2C.CODEC);
         PayloadTypeRegistry.playS2C().register(BlockSyncS2C.TYPE, BlockSyncS2C.CODEC);
+        PayloadTypeRegistry.playS2C().register(DoorDebugSyncS2C.TYPE, DoorDebugSyncS2C.CODEC);
     }
 
     public static void registerServerReceivers() {

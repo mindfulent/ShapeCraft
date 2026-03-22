@@ -24,6 +24,7 @@ public class PoolBlockEntity extends BlockEntity {
     private int slotIndex = -1;
     private String displayName = "";
     private String modelJson = "";
+    private String blockType = "";
     private @Nullable VoxelShape cachedShape = null;
 
     public PoolBlockEntity(BlockPos pos, BlockState state) {
@@ -56,6 +57,19 @@ public class PoolBlockEntity extends BlockEntity {
         this.modelJson = modelJson;
         computeShape();
         setChanged();
+    }
+
+    public String getBlockType() {
+        return blockType;
+    }
+
+    public void setBlockType(String blockType) {
+        this.blockType = blockType != null ? blockType : "";
+        setChanged();
+    }
+
+    public boolean isDoor() {
+        return "door".equals(blockType);
     }
 
     /**
@@ -151,6 +165,7 @@ public class PoolBlockEntity extends BlockEntity {
         tag.putInt("SlotIndex", slotIndex);
         tag.putString("DisplayName", displayName);
         tag.putString("ModelJson", modelJson);
+        tag.putString("BlockType", blockType);
     }
 
     @Override
@@ -159,6 +174,7 @@ public class PoolBlockEntity extends BlockEntity {
         slotIndex = tag.getInt("SlotIndex");
         displayName = tag.getString("DisplayName");
         modelJson = tag.getString("ModelJson");
+        blockType = tag.getString("BlockType");
         computeShape();
     }
 }
