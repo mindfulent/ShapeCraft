@@ -106,6 +106,11 @@ public class PoolBlock extends HorizontalDirectionalBlock implements EntityBlock
     }
 
     @Override
+    protected VoxelShape getCollisionShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
+        return this.getShape(state, level, pos, context);
+    }
+
+    @Override
     public VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
         BlockEntity be = level.getBlockEntity(pos);
         if (be instanceof PoolBlockEntity poolBe) {

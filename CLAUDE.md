@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-ShapeCraft is a Minecraft mod (Fabric 1.21.1) that generates custom block models from natural language descriptions using Claude Sonnet 4.6 backed by a RAG index of ~2,100 vanilla block definitions. Status: **v0.4.16** — Phases 0–10 implemented (scaffold, networking, backend client, model injection, persistence, license, backend API routes, RAG corpus, content filter, texture tinting, multiplayer hardening, two-block-tall blocks, door mechanics). Backend routes and Discord cog live in theblockacademy and slashAI repos respectively.
+ShapeCraft is a Minecraft mod (Fabric 1.21.1) that generates custom block models from natural language descriptions using Claude Sonnet 4.6 backed by a RAG index of ~2,100 vanilla block definitions. Status: **v0.4.17** — Phases 0–10 implemented (scaffold, networking, backend client, model injection, persistence, license, backend API routes, RAG corpus, content filter, texture tinting, multiplayer hardening, two-block-tall blocks, door mechanics). Backend routes and Discord cog live in theblockacademy and slashAI repos respectively.
 
 Design docs: `docs/BRIEF.md` (design brief), `docs/PRD.md` (product requirements), `docs/TDD.md` (technical design)
 

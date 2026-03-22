@@ -1,4 +1,4 @@
-# ShapeCraft v0.4.16
+# ShapeCraft v0.4.17
 
 Natural language block generation for Minecraft. Describe a custom block in plain English and ShapeCraft generates a valid block model, selects textures, and injects it as a placeable block — all in real time, no restart needed.
 

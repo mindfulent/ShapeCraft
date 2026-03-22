@@ -63,6 +63,7 @@ public class ShapeCraft implements ModInitializer {
             PoolBlock block = new PoolBlock(BlockBehaviour.Properties.of()
                     .mapColor(MapColor.STONE)
                     .strength(1.5f, 6.0f)
+                    .dynamicShape()
                     .noOcclusion(), i);
 
             Block registeredBlock = Registry.register(BuiltInRegistries.BLOCK, blockId, block);

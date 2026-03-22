@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.4.17 — 2026-03-22
+
+Fix open door collision — players can now walk through open doors.
+
+### Root Cause
+`PoolBlock` was missing `dynamicShape()` in its `BlockBehaviour.Properties`. Without this flag, Minecraft caches collision shapes per-BlockState at registration time using `EmptyBlockGetter` (no block entities exist). Our `getShape()` reads `PoolBlockEntity.isDoor()` to return thin door slabs, but during cache init there is no block entity — so it falls through to `Shapes.block()` (a full cube). This cached full-cube collision was used regardless of door open/closed state.
+
+### Fix
+- Added `.dynamicShape()` to `PoolBlock` properties in `ShapeCraft.java` — disables BlockState shape cache, matching vanilla's pattern for shulker boxes and moving pistons (any block whose shape depends on block entity data)
+- Added `getCollisionShape()` override in `PoolBlock` — delegates to the existing 4-argument `getShape()` which handles door-aware thin slab shapes based on block entity data, facing direction, and open state
+
 ## v0.4.16 — 2026-03-22
 
 Fix door texture/hitbox alignment for all facing directions and open/closed states.
