@@ -1,5 +1,76 @@
 # Changelog
 
+## v0.4.10 — 2026-03-21
+
+Interactive door mechanics for generated blocks. Doors now open and close on right-click with sound effects, synced partner halves, and distinct open/closed model variants.
+
+### OPEN Block State Property
+- Added `BooleanProperty OPEN` to `PoolBlock`, expanding block states to 16 per slot (FACING × HALF × OPEN)
+- Non-door blocks ignore the property (OPEN always false)
+
+### Door Interaction
+- `PoolBlock.useWithoutItem()` checks `blockType == "door"` from pool data; toggles OPEN on right-click
+- Both halves (LOWER/UPPER) toggle together via partner block lookup
+- Plays `WOODEN_DOOR_OPEN`/`WOODEN_DOOR_CLOSE` sound effects
+- Door open collision shape: thin 3/16-wide slab rotated by FACING direction
+
+### Open Model Variants
+- Backend prompt includes new "Interactive Blocks" section instructing Claude to generate open model variants for doors, gates, shutters, etc.
+- Backend `generate.ts` parses `model_open`, `upper_model_open`, `block_type` from Claude's response and returns `model_json_open`, `upper_model_json_open`, `block_type` in the API response
+- New fields flow through the full pipeline: `GenerationResult` → `BlockSlotData` → `WorldDataManager` (NBT persistence) → `GenerationCompleteS2C`/`BlockSyncS2C` (network sync) → `ModelCache.ModelData`
+- `BakedModelCache` keyed by `(slotIndex, half, open)` — open and closed states render different geometry
+- `DynamicBlockModel` selects open variant JSON when `open=true`, falls back to closed model if no open variant exists
+- `RuntimeModelBaker` bakes both open and closed variants when open model JSON is present
+- `ShapeCraftModelPlugin` iterates all 16 states per slot (FACING × HALF × OPEN)
+
+## v0.4.9 — 2026-03-21
+
+Fix cullface rotation for directional blocks and add backend tall block support.
+
+### Cullface Rotation Fix
+- `DynamicBlockModel.bakeQuads()` now rotates the cullface direction through the same transformation matrix that FaceBakery applies to vertex positions
+- New `rotateCullface()` helper transforms the direction vector by `BlockModelRotation.getRotation().getMatrix()`, ensuring quads land in the correct face bucket after rotation
+- Fixes texture/face visibility issues when placing generated blocks in non-NORTH facing directions — previously, rotated quads were stored under their pre-rotation cullface direction, so the renderer couldn't find them
+
+### Backend Tall Block Support
+- `prompt.ts`: Added tall block instructions to the system prompt — Claude now returns `upper_model` for objects that naturally span two blocks (doors, arches, tall lamps, wardrobes, etc.)
+- `generate.ts`: Parses optional `upper_model` from Claude response, stringifies it, and includes `upper_model_json` in the API response (defaults to `""` when absent)
+
+## v0.4.8 — 2026-03-21
+
+Two-block-tall generated blocks — doors, tall lamps, pillars, arches, and other objects that naturally span 2 blocks vertically now generate as proper two-block structures instead of being squished into a single block.
+
+### BlockHalf Enum + HALF Property
+- New `BlockHalf` enum (`LOWER`/`UPPER`) implementing `StringRepresentable`
+- `PoolBlock` gains `HALF` property — block states now enumerate FACING × HALF (8 variants per slot)
+- Single blocks default to `HALF=LOWER`, preserving backward compatibility
+
+### Tall Block Placement & Breaking
+- `PoolBlock.getStateForPlacement()` checks space above for tall blocks — prevents placement if obstructed or at world height limit
+- `PoolBlock.setPlacedBy()` places upper half with `HALF=UPPER` and the upper model JSON
+- Breaking either half removes the partner (verified by same slot index) — only lower half drops the item
+
+### Data Pipeline
+- `BlockSlotData` gains `upperModelJson` field with `isTall()` helper
+- `GenerationResult` carries `upperModelJson` from backend response
+- `BackendClient` parses optional `upper_model_json` from API response
+- `GenerationManager` validates both halves and passes `upperModelJson` through to slot assignment and network broadcast
+
+### Network Protocol (v2)
+- `GenerationCompleteS2C` and `BlockSyncS2C.BlockSyncEntry` include `upperModelJson` field
+- Protocol version bumped from 1 to 2 — old clients get clear version mismatch error
+
+### Persistence
+- `WorldDataManager` saves/loads `UpperModelJson` NBT tag — defaults to `""` for old saves (zero migration)
+
+### Client Model Pipeline
+- `ModelCache.ModelData` gains `upperModelJson` field
+- `BakedModelCache` key expanded to `CacheKey(slotIndex, half)` — LOWER and UPPER halves cached independently
+- `DynamicBlockModel` selects model JSON based on half: UPPER uses `upperModelJson`, LOWER uses `modelJson`
+- `DynamicBakedModel` passes `half` through to cache lookup
+- `ShapeCraftModelPlugin` resolves both FACING and HALF in BlockStateResolver
+- `RuntimeModelBaker` bakes both halves for tall blocks in single and batch paths
+
 ## v0.4.7 — 2026-03-21
 
 Fix texture orientation on generated blocks — faces showed different cropped regions of the texture because position-based UV mapping sampled different texture areas depending on element placement within the 0–16 coordinate space.
